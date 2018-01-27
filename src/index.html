@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<title>IOTA local PoW promoter :: By Snowlove</title>
+		
+		<script type="text/javascript" src="libs/iota.min.js"></script>
+		<script type="text/javascript" src="libs/curl.min.js"></script>
+		<script type="text/javascript" src="libs/iota.extensions.js"></script>
+
+<script>
+	var iota;
+
+	/*
+	* Partial by   : snowlove
+	* website      :  https://cindar.me
+	* LICENSE    : Creative Commons [BY][SA][NC] : https://creativecommons.org/licenses/by-nc-sa/3.0/legalcode.txt
+	*/
+
+	
+	function webgl_support() {
+		try{ var canvas = document.createElement( 'canvas' ); return !! window.WebGLRenderingContext && (canvas.getContext( 'webgl' ) || canvas.getContext( 'experimental-webgl' ) ); }catch( e ) { return false; }
+	}
+	
+	function pageLoaded() {
+		if(webgl_support()) { document.getElementById("NavigationBar").innerHTML = "IOTA local PoW Promoter (GPU Edition)"; }
+	}
+	
+
+	
+	Toggle_Submit = function()
+	{
+		if(document.getElementById("promote-submit").disabled == true)
+		{
+			document.getElementById("promote-submit").disabled = false;
+		} else {
+			document.getElementById("promote-submit").disabled = true;
+		}
+	}
+	
+	preflight = function (txHash, node)
+	{
+		if(!txHash)
+		{
+			document.getElementById("errorhash").innerHTML = 'Hash is required!';
+			
+			return;
+		} else {
+			document.getElementById("errorhash").innerHTML = '';
+		}
+			
+		if (!node)
+		{
+			document.getElementById("errornode").innerHTML = 'Node is required!';
+			
+			return;
+		} else {
+			document.getElementById("errornode").innerHTML = '';
+		}
+		
+		Toggle_Submit();
+		
+		iota = new IOTA({'provider': node});
+		
+		iota.api.attachToTangle = iota.localAttachToTangle;
+		iota.api.__proto__.attachToTangle = iota.localAttachToTangle;
+		iota.api.interruptAttachingToTangle = iota.localInterruptAttachingToTangle;
+		iota.api.__proto__.interruptAttachingToTangle = iota.localInterruptAttachingToTangle;
+		
+		BKBigKidsMeal(txHash, node);
+	}
+	
+
+	
+	BKBigKidsMeal = function (txHash, node)
+	{
+		//iota = new IOTA({'provider': 'http://iota.band:14265'});
+	
+		var count = 0;
+		const MAX_PROMOTIONS = 20;
+		document.getElementById("status").innerHTML = `Promoting...${count} of ${MAX_PROMOTIONS}`;
+		const transfer = [{
+			address: "IS9SOMEONE9GETTING9THE9BEST9THE9BEST9THE9BEST9THE9BEST9OF9YOU9SNOWLOVE99999999999",
+			value: 0,
+			message: "BCBDCDKD9DCDJDTCEASCCDBDTCEAKDTCBDHDEAPCBDSCEAIDGDTCSCEATBPCJDPCGDRCFDXCDDHDEAKDWCCDEAKDCDID9DSCEACDUCEAHDWCIDBDZCEAXCHDSAEAFDTCSCSCXCHDSARCCDADTAFDTAXCCDHDPCGDIDDDDDCDFDHD",
+			tag: "IOTASUPPORT9SNOWLOVE"
+		}];
+
+		var checkDelay = 15000;
+		function interrupt() {
+			console.log(count);
+			document.getElementById("status").innerHTML = `Promoting...${count} of ${MAX_PROMOTIONS}`;
+			return count++ >= MAX_PROMOTIONS;
+		}
+		
+		var params = { interrupt, delay: 1000 };
+		iota.api.promoteTransaction(txHash, 3, 14, transfer, params, function(e, s)
+		{
+			if (s) 
+			{
+				//console.log(s);
+				document.getElementById("status").innerHTML = "Promotion done.";
+				Toggle_Submit();
+			}
+			
+			if(e)
+			{
+				if(e.toString().includes("Inconsistent"))
+				{
+					document.getElementById("status").innerHTML = "Error: Inconsistent subtangle";
+					Toggle_Submit();
+				} else if (e.toString().includes("tail"))
+				{
+					document.getElementById("status").innerHTML = "Error: Not the transaction tail";
+					Toggle_Submit();
+				} else if (e.toString().includes("Invalid transaction"))
+				{
+					document.getElementById("status").innerHTML = "Error: Invalid Transaction";
+					Toggle_Submit();
+				} else {
+					document.getElementById("status").innerHTML = "Error: Try again";
+					Toggle_Submit();
+				}
+				console.log(e);
+			}
+		});
+		
+		function checkInclusion (err, isIncluded)
+		{
+			if (isIncluded[0])
+			{
+				console.log(isIncluded[0]);
+				params.interrupt = true;
+				document.getElementById("status").innerHTML = "Confirmed.";
+			} else {
+				setTimeout(function () { iota.api.getLatestInclusion([txHash], checkInclusion) }, checkDelay);
+			}
+		}
+		
+		iota.api.getLatestInclusion([txHash], checkInclusion);
+	}
+window.onload = pageLoaded;
+</script>
+
+<link href="https://maxcdn.bootstrapcdn.com/bootswatch/3.3.7/spacelab/bootstrap.min.css" rel="stylesheet" integrity="sha384-L/tgI3wSsbb3f/nW9V6Yqlaw3Gj7mpE56LWrhew/c8MIhAYWZ/FNirA64AVkB5pI" crossorigin="anonymous" />
+<link href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet" integrity="sha384-wvfXpqpZZVQGK6TAh5PVlGOfQNHSoD2xbE+QkPxCAFlNEevoEH3Sl0sibVcOQVnN" crossorigin="anonymous" />
+<style type="text/css">
+.form-control.number { width: auto; }
+.form-control[type="color"] { width : 60px; padding : 2px; display : inline-block; }
+.form-control[multiple] { height : auto; }
+.form-control { width: 65%; display: inline-block; margin-top: 5px; }
+label { padding-right: 5px; display: inline-block; width: 45px; }
+#errorhash, #errornode { display: inline-block; color:crimson; padding-left: 4px; }
+.container-fluid { height: 100%; padding-top: 50px; }
+#status { font-size: 1.8em; margin-left: 45%; color: cornflowerblue; }
+html, body { margin: 0;padding: 0;height: calc(100% - 60px);position: relative;width: 100%; }
+body { background-color: #1e1e1e; color: #dcdcdc; }
+a { text-decoration: none; }
+footer { line-height: 45px;top: 0;position: relative;width: 100%;background-color: #333333;color: #FFF;overflow:auto;text-align:center; }
+header, nav, main, section, article, time, tags { display: block; } /* back, add a */
+header > nav, header > div, .ftext, footer > span, .donate { display: inline-block; }
+main { min-width: 900px;min-height: 100%;margin-top: 75px; }
+#NavigationBar {background-color: #333333;height: 55px;width: 100%;position: fixed;top: 0; text-align:center; line-height:45px;}
+.incwrap { margin: auto;width: 80%;padding-bottom: 100px; }
+.fsStore { font-family: "Open Sans","Helvetica Neue",Helvetica,Arial,sans-serif; font-size: 1.7em; }
+.fsStoreF { font-size: 1.2em; }
+/* if you're reading this, yes, I ripped off some of the css from my own site because copy and pasting layouts is easy. */
+/* Also @steve is still for sell for 1Giota now DM me */
+</style>
+
+</head>
+
+<body>
+	<header id="NavigationBar" class="fsStore">
+		This site requires webgl to work.
+	</header>
+	<main>
+		<div class="incwrap">
+		<p id="status"></p>
+		<form id="rendered-form">
+			<div class="fb-text form-group field-promote-tx-hash-field">
+				<label for="promoteTxHash" class="fb-text-label">Hash </label><input type="text" placeholder="999999999999999999999999999999999999999999999999999999999999999999999999999999999" class="form-control" name="promoteTxHash" maxlength="81" id="promoteTxHash" required="required" aria-required="true"><div id="errorhash"></div><br />
+				<label for="node">Node </label><input type="text" placeholder="http://iota.nodeaddress.com:9999" value="http://nodes.iota.fm:80" class="form-control" name="node" id="node" /><div id="errornode"></div>
+			</div>
+			<div class="fb-button form-group field-promote-submit">
+				<button type="button" class="btn btn-default" name="promote-submit" style="default" id="promote-submit" onClick="preflight(promoteTxHash.value, node.value);">Submit</button>
+			</div>
+		</form>
+		
+		<p>Did this tool help you? Please donate to help create more tools like this: <code>OJVPGSRTVELYUW9IHEEBNJQCQXPMXNKFVTWW9ADLYYPDGXWQRACPGQSZCOHUVQSGWKMBNIZNXVYWULCUWDQLIGPALD</code></p>
+		</div>
+	</main>
+	<footer class="fsStoref">
+		By Snowlove - Rajiv (Original idea) - GpanosXP (Local PoW)
+	</footer>
+</body>
+</html>
