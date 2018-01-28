@@ -103,11 +103,13 @@
 			if(s)
 			{
 				print("Reattached! (New tail <code>" + s[0].hash.toString() + "</code>)");
+				Toggle_Submit();
 			}
 			
 			if(e)
 			{
 				print("stopped (general error, retry)");
+				Toggle_Submit();
 				console.log(e);
 			}
 		});
@@ -142,21 +144,20 @@
 			
 			if(e)
 			{
+				Toggle_Submit();
 				if(e.toString().includes("Inconsistent"))
 				{
 					print("stopped (Inconsistent subtangle)");
-					Toggle_Submit();
-				} else if (e.toString().includes("tail"))
+				}
+				else if (e.toString().includes("tail"))
 				{
 					print("stopped (Not the transaction tail)");
-					Toggle_Submit();
-				} else if (e.toString().includes("Invalid transaction"))
+				}
+				else if (e.toString().includes("Invalid transaction"))
 				{
 					print("stopped (Invalid Transaction)");
-					Toggle_Submit();
 				} else {
 					print("stopped (general error, resubmit.)");
-					Toggle_Submit();
 				}
 				console.log(e);
 			}
