@@ -9,14 +9,22 @@
 		<script type="text/javascript" src="libs/iota.extensions.js"></script>
 
 <script>
-	var iota;
-
+	var iota, node;
+	var confirmation = false;
+	var user_settings = {
+		'node' : '',
+		'hashes' : {}
+	}
 	/*
 	* Partial by   : snowlove
 	* website      :  https://cindar.me
 	* LICENSE    : Creative Commons [BY][SA][NC] : https://creativecommons.org/licenses/by-nc-sa/3.0/legalcode.txt
 	*/
 
+	function print(msg)
+	{
+		document.getElementById("status").innerHTML = "Status: " + msg;
+	}
 	
 	function webgl_support() {
 		try{ var canvas = document.createElement( 'canvas' ); return !! window.WebGLRenderingContext && (canvas.getContext( 'webgl' ) || canvas.getContext( 'experimental-webgl' ) ); }catch( e ) { return false; }
@@ -26,19 +34,33 @@
 		if(webgl_support()) { document.getElementById("NavigationBar").innerHTML = "IOTA local PoW Promoter (GPU Edition)"; }
 	}
 	
-
+	async function CheckInclusion()
+	{
+		var tmp = new IOTA({'provider': user_settings.node});
+		console.log("Hello");
+		tmp.api.getLatestInclusion([user_settings.hashes[0]], await function(e, s) {
+			if(s) { console.log(s); return true; } else { console.log(e); return false; } 
+		});
+		console.log("We shouldn't see this until true");
+		delete tmp;
+		
+		return "puppies";
+	}
 	
 	Toggle_Submit = function()
 	{
 		if(document.getElementById("promote-submit").disabled == true)
 		{
 			document.getElementById("promote-submit").disabled = false;
+			document.getElementById("reattach-submit").disabled = false;
 		} else {
 			document.getElementById("promote-submit").disabled = true;
+			document.getElementById("reattach-submit").disabled = true;
 		}
 	}
+
 	
-	preflight = function (txHash, node)
+	preflight = function (txHash, node, btn)
 	{
 		if(!txHash)
 		{
@@ -47,6 +69,7 @@
 			return;
 		} else {
 			document.getElementById("errorhash").innerHTML = '';
+			user_settings.hashes[0] = txHash;
 		}
 			
 		if (!node)
@@ -56,9 +79,14 @@
 			return;
 		} else {
 			document.getElementById("errornode").innerHTML = '';
+			user_settings.node = node;
 		}
 		
-		Toggle_Submit();
+		/*const bundlesToTailsMap = new Map()
+		
+		const bundleHash = txs[0].bundle
+		const tail = bundlesToTailsMap.get(bundleHash)
+		let tails = txs.filter(tx => tx.currentIndex === 0)*/
 		
 		iota = new IOTA({'provider': node});
 		
@@ -67,18 +95,42 @@
 		iota.api.interruptAttachingToTangle = iota.localInterruptAttachingToTangle;
 		iota.api.__proto__.interruptAttachingToTangle = iota.localInterruptAttachingToTangle;
 		
-		BKBigKidsMeal(txHash, node);
+		if (btn == "promote")
+		{
+			print("checking confirmation state...");
+			iota.api.getLatestInclusion([txHash], function(e, s) { if(s[0]) { print("Transaction is already confirmed"); delete iota; } else { Toggle_Submit(); BKBigKidsMeal(txHash); }  });
+		}
+		else if (btn == "reattach")
+		{
+			reattachTransaction(txHash);
+		} else {
+			print("Things went to hell.");
+		}
 	}
 	
 
-	
-	BKBigKidsMeal = function (txHash, node)
+	reattachTransaction = function (txHash)
 	{
-		//iota = new IOTA({'provider': 'http://iota.band:14265'});
+		print("Reattaching...");
+		iota.api.replayBundle(txHash, 3, 14, function(e, s) {
+			if(s)
+			{
+				print("Reattached! (New tail <code>" + s[0].hash.toString() + "</code>)");
+			}
+			
+			if(e)
+			{
+				print("stopped (general error, retry)");
+				console.log(e);
+			}
+		});
+	}
 	
+	BKBigKidsMeal = function (txHash)
+	{	
 		var count = 0;
 		const MAX_PROMOTIONS = 20;
-		document.getElementById("status").innerHTML = `Promoting...${count} of ${MAX_PROMOTIONS}`;
+		print(count.toString() + "/" + MAX_PROMOTIONS.toString() + " promotions");
 		const transfer = [{
 			address: "IS9SOMEONE9GETTING9THE9BEST9THE9BEST9THE9BEST9THE9BEST9OF9YOU9SNOWLOVE99999999999",
 			value: 0,
@@ -88,8 +140,7 @@
 
 		var checkDelay = 15000;
 		function interrupt() {
-			console.log(count);
-			document.getElementById("status").innerHTML = `Promoting...${count} of ${MAX_PROMOTIONS}`;
+			print(count.toString() + "/" + MAX_PROMOTIONS.toString() + " promotions");
 			return count++ >= MAX_PROMOTIONS;
 		}
 		
@@ -98,8 +149,7 @@
 		{
 			if (s) 
 			{
-				//console.log(s);
-				document.getElementById("status").innerHTML = "Promotion done.";
+				print("Done promoting, awaiting confirmation...");
 				Toggle_Submit();
 			}
 			
@@ -107,18 +157,18 @@
 			{
 				if(e.toString().includes("Inconsistent"))
 				{
-					document.getElementById("status").innerHTML = "Error: Inconsistent subtangle";
+					print("stopped (Inconsistent subtangle)");
 					Toggle_Submit();
 				} else if (e.toString().includes("tail"))
 				{
-					document.getElementById("status").innerHTML = "Error: Not the transaction tail";
+					print("stopped (Not the transaction tail)");
 					Toggle_Submit();
 				} else if (e.toString().includes("Invalid transaction"))
 				{
-					document.getElementById("status").innerHTML = "Error: Invalid Transaction";
+					print("stopped (Invalid Transaction)");
 					Toggle_Submit();
 				} else {
-					document.getElementById("status").innerHTML = "Error: Try again";
+					print("stopped (general error, resubmit.)");
 					Toggle_Submit();
 				}
 				console.log(e);
@@ -131,7 +181,7 @@
 			{
 				console.log(isIncluded[0]);
 				params.interrupt = true;
-				document.getElementById("status").innerHTML = "Confirmed.";
+				print("Confirmed!");
 			} else {
 				setTimeout(function () { iota.api.getLatestInclusion([txHash], checkInclusion) }, checkDelay);
 			}
@@ -152,7 +202,7 @@ window.onload = pageLoaded;
 label { padding-right: 5px; display: inline-block; width: 45px; }
 #errorhash, #errornode { display: inline-block; color:crimson; padding-left: 4px; }
 .container-fluid { height: 100%; padding-top: 50px; }
-#status { font-size: 1.8em; margin-left: 45%; color: cornflowerblue; }
+#status { font-size: 1.8em; /*margin-left: 45%;*/ color: cornflowerblue; margin:auto; text-align:center; }
 html, body { margin: 0;padding: 0;height: calc(100% - 60px);position: relative;width: 100%; }
 body { background-color: #1e1e1e; color: #dcdcdc; }
 a { text-decoration: none; }
@@ -164,6 +214,10 @@ main { min-width: 900px;min-height: 100%;margin-top: 75px; }
 .incwrap { margin: auto;width: 80%;padding-bottom: 100px; }
 .fsStore { font-family: "Open Sans","Helvetica Neue",Helvetica,Arial,sans-serif; font-size: 1.7em; }
 .fsStoreF { font-size: 1.2em; }
+.btn-addition { margin-left: 10px; }
+.btn { width: 200px; }
+.fb-button.form-group.field-promote-submit { padding-left: 45px; }
+code { background-color: #1e1e1e; font-size:14px; }
 /* if you're reading this, yes, I ripped off some of the css from my own site because copy and pasting layouts is easy. */
 /* Also @steve is still for sell for 1Giota now DM me */
 </style>
@@ -172,18 +226,19 @@ main { min-width: 900px;min-height: 100%;margin-top: 75px; }
 
 <body>
 	<header id="NavigationBar" class="fsStore">
-		This site requires webgl to work.
+		Error: This site requires webgl to work.
 	</header>
 	<main>
 		<div class="incwrap">
-		<p id="status"></p>
+		<p id="status">Status: None</p>
 		<form id="rendered-form">
 			<div class="fb-text form-group field-promote-tx-hash-field">
 				<label for="promoteTxHash" class="fb-text-label">Hash </label><input type="text" placeholder="999999999999999999999999999999999999999999999999999999999999999999999999999999999" class="form-control" name="promoteTxHash" maxlength="81" id="promoteTxHash" required="required" aria-required="true"><div id="errorhash"></div><br />
 				<label for="node">Node </label><input type="text" placeholder="http://iota.nodeaddress.com:9999" value="http://nodes.iota.fm:80" class="form-control" name="node" id="node" /><div id="errornode"></div>
 			</div>
 			<div class="fb-button form-group field-promote-submit">
-				<button type="button" class="btn btn-default" name="promote-submit" style="default" id="promote-submit" onClick="preflight(promoteTxHash.value, node.value);">Submit</button>
+				<button type="button" class="btn btn-default" name="promote-submit" style="default" id="promote-submit" onClick="preflight(promoteTxHash.value, node.value, 'promote');">Promote</button>
+				<button type="button" class="btn btn-default btn-addition" name="reattach-submit" style="default" id="reattach-submit" onClick="preflight(promoteTxHash.value, node.value, 'reattach');">Reattach</button>
 			</div>
 		</form>
 		
