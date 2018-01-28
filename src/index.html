@@ -10,9 +10,8 @@
 
 <script>
 	var iota, node;
-	var confirmation = false;
 	var user_settings = {
-		'node' : '',
+		'nodes' : '',
 		'hashes' : {}
 	}
 	/*
@@ -32,19 +31,6 @@
 	
 	function pageLoaded() {
 		if(webgl_support()) { document.getElementById("NavigationBar").innerHTML = "IOTA local PoW Promoter (GPU Edition)"; }
-	}
-	
-	async function CheckInclusion()
-	{
-		var tmp = new IOTA({'provider': user_settings.node});
-		console.log("Hello");
-		tmp.api.getLatestInclusion([user_settings.hashes[0]], await function(e, s) {
-			if(s) { console.log(s); return true; } else { console.log(e); return false; } 
-		});
-		console.log("We shouldn't see this until true");
-		delete tmp;
-		
-		return "puppies";
 	}
 	
 	Toggle_Submit = function()
