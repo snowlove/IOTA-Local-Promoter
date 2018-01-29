@@ -9,7 +9,7 @@
 		<script type="text/javascript" src="libs/iota.extensions.js"></script>
 
 <script>
-	var iota, node;
+	var iota, node, logElement;
 	var user_settings = {
 		'nodes' : '',
 		'hashes' : {}
@@ -21,7 +21,16 @@
 	*/
 
 	function print(msg) {
-		document.getElementById("status").innerHTML = "Status: " + msg;
+		var d = new Date();
+		var hh = d.getHours();
+		var mm = d.getMinutes();
+		var ss = d.getSeconds();
+
+		var logline = document.createElement("div");
+		logline.innerHTML = "[" + hh + ":" + mm + ":" + ss + "]: " + msg;
+		logElement.insertBefore(logline, logElement.firstChild);
+		
+		delete d;
 	}
 	
 	
@@ -32,7 +41,9 @@
 	
 	
 	function pageLoaded() {
-		if(webgl_support()) { document.getElementById("NavigationBar").innerHTML = "IOTA local PoW Promoter (GPU Edition)"; }
+		logElement = document.getElementById("eventLogContent");
+		print("Testing for WebGL...");
+		if(webgl_support()) { document.getElementById("NavigationBar").innerHTML = "IOTA local PoW Promoter (GPU Edition)"; print("WebGL Enabled READY, SET, GO!"); } else { print("WebGL not enabled. [<a href=\"https://www.google.com/search?q=How+do+I+enable+WebGL&ie=utf-8\">Click here</a>] for help enabling it."); }	
 	}
 	
 	
@@ -47,27 +58,47 @@
 		}
 	}
 
+	/*****************
+	*	testing area
+	*	-
+	*	var x = utils.isBundle(); api.isPromotable() true / false
+	*****************/
 	
-	preflight = function (txHash, node, btn)
+	function TestFunction(hash, node)
 	{
-		if(!txHash)
+		print("Initializing...");
+		//var tmp = new IOTA({'provider': node});
+	}
+	
+	//end test	
+	
+	function getTxTail(hash)
+	{
+		iota.api.getTransactionsObjects([hash], function(e, s)
 		{
-			document.getElementById("errorhash").innerHTML = 'Hash is required!';
+			if (s) { iota.api.sendCommand({'command': 'findTransactions', 'bundles': [s[0]['bundle']]}, function(e, s) { if(s) { print("Tail found: " + s[0]); } if(e) print("Couldn't find the tail try again or try a different node."); }); }
+			if (e) { print("Couldn't find the tail try again or try a different node."); }
+		});
+	}
+	
+	preflight = function (hash, node, btn)
+	{
+		if(!iota) iota = new IOTA({'provider': node});
+	
+		if(!hash || !iota.valid.isHash(hash)) {
+			document.getElementById("errorhash").innerHTML = 'Invalid hash';
 			
 			return;
 		} else {
 			document.getElementById("errorhash").innerHTML = '';
-			user_settings.hashes[0] = txHash;
 		}
-			
-		if (!node)
-		{
-			document.getElementById("errornode").innerHTML = 'Node is required!';
+
+		if (!node) {
+			document.getElementById("errornode").innerHTML = 'Invalid node';
 			
 			return;
 		} else {
 			document.getElementById("errornode").innerHTML = '';
-			user_settings.node = node;
 		}
 		
 		/*const bundlesToTailsMap = new Map()
@@ -76,8 +107,6 @@
 		const tail = bundlesToTailsMap.get(bundleHash)
 		let tails = txs.filter(tx => tx.currentIndex === 0)*/
 		
-		iota = new IOTA({'provider': node});
-		
 		iota.api.attachToTangle = iota.localAttachToTangle;
 		iota.api.__proto__.attachToTangle = iota.localAttachToTangle;
 		iota.api.interruptAttachingToTangle = iota.localInterruptAttachingToTangle;
@@ -85,18 +114,23 @@
 		
 		if (btn == "promote")
 		{
-			print("checking confirmation state...");
-			iota.api.getLatestInclusion([txHash], function(e, s) { if(s[0]) { print("Transaction is already confirmed"); delete iota; } else { Toggle_Submit(); BKBigKidsMeal(txHash); }  });
+			if(iota.api.isPromotable(hash))
+			{
+				iota.api.getLatestInclusion([hash], function(e, s) {
+					if(s[0]) { print("Transaction Confirmed"); delete iota; } else { Toggle_Submit(); BKBigKidsMeal(hash); }
+				});
+			} else {
+				print("Transaction not promotable, try reattaching isntead.");
+			}			
 		}
 		else if (btn == "reattach")
 		{
 			Toggle_Submit();
-			reattachTransaction(txHash);
+			reattachTransaction(hash);
 		} else {
 			print("Things went to hell.");
 		}
 	}
-	
 
 	reattachTransaction = function (txHash)
 	{
@@ -104,16 +138,20 @@
 		iota.api.replayBundle(txHash, 3, 14, function(e, s) {
 			if(s)
 			{
-				print("Reattached! (New tail <code>" + s[0].hash.toString() + "</code>)");
+				print("Reattached sucessful :: New tail: " + s[0].hash.toString());
 				Toggle_Submit();
 			}
 			
 			if(e)
 			{
-				//TODO :: Add tail error catching and handling
-				print("stopped (general error, retry)");
+				if (e.toString().includes("tail"))
+				{
+					print("stopped :: hash is not the transaction tail");
+					print("Finding tail....");
+					getTxTail(txHash);
+				} else { print(e); }
+				
 				Toggle_Submit();
-				console.log(e);
 			}
 		});
 	}
@@ -121,8 +159,9 @@
 	BKBigKidsMeal = function (txHash)
 	{	
 		var count = 0;
+		var KSE = false; //it does.
 		const MAX_PROMOTIONS = 20;
-		print(count.toString() + "/" + MAX_PROMOTIONS.toString() + " promotions");
+		//print(count.toString() + "/" + MAX_PROMOTIONS.toString() + " promotions");
 		const transfer = [{
 			address: "IS9SOMEONE9GETTING9THE9BEST9THE9BEST9THE9BEST9THE9BEST9OF9YOU9SNOWLOVE99999999999",
 			value: 0,
@@ -132,38 +171,39 @@
 
 		var checkDelay = 15000;
 		function interrupt() {
-			print(count.toString() + "/" + MAX_PROMOTIONS.toString() + " promotions");
+			if(count > 0) print(count.toString() + "/" + MAX_PROMOTIONS.toString() + " promotions");
 			return count++ >= MAX_PROMOTIONS;
 		}
 		
 		var params = { interrupt, delay: 1000 };
-		iota.api.promoteTransaction(txHash, 3, 14, transfer, params, function(e, s)
+		iota.api.promoteTransaction(txHash, 4, 14, transfer, params, function(e, s)
 		{
 			if (s) 
 			{
-				print("Done promoting, awaiting confirmation...");
-				//TODO :: Maybe make this a little more verbose so people don't think it's stuck. 
+				print("Promotion finished");
 				Toggle_Submit();
 			}
 			
 			if(e)
 			{
 				Toggle_Submit();
+				KSE = true;
 				if(e.toString().includes("Inconsistent"))
 				{
-					print("stopped (Inconsistent subtangle)");
+					print("stopped :: Inconsistent subtangle");
 					//TODO :: Reattach every x minutes instead.
 				}
 				else if (e.toString().includes("tail"))
 				{
-					print("stopped (Not the transaction tail)");
-					//TODO :: Find the tail.
+					print("stopped :: hash is not the transaction tail");
+					print("Finding tail....");
+					getTxTail(txHash);
 				}
 				else if (e.toString().includes("Invalid transaction"))
 				{
-					print("stopped (Invalid Transaction)");
+					print("stopped :: Invalid Transaction");
 				} else {
-					print("stopped (general error, resubmit.)");
+					print("stopped :: general error :: resubmit");
 				}
 				console.log(e);
 			}
@@ -174,10 +214,12 @@
 			//TODO :: Fix this it goes a little wonky sometimes..
 			if (isIncluded[0])
 			{
-				console.log(isIncluded[0]);
+				//console.log(isIncluded[0]);
 				params.interrupt = true;
 				print("Confirmed!");
 			} else {
+				if (KSE) return;
+				print("Checking inclusion....");
 				setTimeout(function () { iota.api.getLatestInclusion([txHash], checkInclusion) }, checkDelay);
 			}
 		}
@@ -197,7 +239,6 @@ window.onload = pageLoaded;
 label { padding-right: 5px; display: inline-block; width: 45px; }
 #errorhash, #errornode { display: inline-block; color:crimson; padding-left: 4px; }
 .container-fluid { height: 100%; padding-top: 50px; }
-#status { font-size: 1.8em; /*margin-left: 45%;*/ color: cornflowerblue; margin:auto; text-align:center; }
 html, body { margin: 0;padding: 0;height: calc(100% - 60px);position: relative;width: 100%; }
 body { background-color: #1e1e1e; color: #dcdcdc; }
 a { text-decoration: none; }
@@ -214,6 +255,7 @@ main { min-width: 900px;min-height: 100%;margin-top: 75px; }
 .fb-button.form-group.field-promote-submit { padding-left: 45px; }
 code { background-color: #1e1e1e; font-size:14px; }
 .provider { position: absolute; padding-right: 15px; right: 0px; } /* at Ralfs request, added link to the main iota.fm site since he's so kind to let us use his nodes as default. */
+#eventLogContent { background-color: #333333; color: cornflowerblue; }
 /* if you're reading this, yes, I ripped off some of the css from my own site because copy and pasting layouts is easy. */
 </style>
 
@@ -225,7 +267,6 @@ code { background-color: #1e1e1e; font-size:14px; }
 	</header>
 	<main>
 		<div class="incwrap">
-		<p id="status">Status: None</p>
 		<form id="rendered-form">
 			<div class="fb-text form-group field-promote-tx-hash-field">
 				<label for="promoteTxHash" class="fb-text-label">Hash </label><input type="text" placeholder="999999999999999999999999999999999999999999999999999999999999999999999999999999999" class="form-control" name="promoteTxHash" maxlength="81" id="promoteTxHash" required="required" aria-required="true"><div id="errorhash"></div><br />
@@ -234,8 +275,11 @@ code { background-color: #1e1e1e; font-size:14px; }
 			<div class="fb-button form-group field-promote-submit">
 				<button type="button" class="btn btn-default" name="promote-submit" style="default" id="promote-submit" onClick="preflight(promoteTxHash.value, node.value, 'promote');">Promote</button>
 				<button type="button" class="btn btn-default btn-addition" name="reattach-submit" style="default" id="reattach-submit" onClick="preflight(promoteTxHash.value, node.value, 'reattach');">Reattach</button>
+				<button type="button" class="btn btn-default btn-addition" name="reattach-submit" style="default" id="reattach-submit" onClick="TestFunction(promoteTxHash.value, node.value);">Test Function</button>
 			</div>
 		</form>
+		
+		<pre class="panel-body text-left" style="height: 500px; overflow: auto;" id="eventLogContent"></pre>
 		
 		<p>Did this tool help you? Please donate to help create more tools like this: <code>OJVPGSRTVELYUW9IHEEBNJQCQXPMXNKFVTWW9ADLYYPDGXWQRACPGQSZCOHUVQSGWKMBNIZNXVYWULCUWDQLIGPALD</code></p>
 		</div>
