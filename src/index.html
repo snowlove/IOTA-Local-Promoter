@@ -117,7 +117,7 @@
 			if(iota.api.isPromotable(hash))
 			{
 				iota.api.getLatestInclusion([hash], function(e, s) {
-					if(s[0]) { print("Transaction Confirmed"); delete iota; } else { Toggle_Submit(); BKBigKidsMeal(hash); }
+					if(s[0]) { print("Transaction Confirmed"); delete iota; Toggle_Submit(); } else { Toggle_Submit(); BKBigKidsMeal(hash); }
 				});
 			} else {
 				print("Transaction not promotable, try reattaching isntead.");
