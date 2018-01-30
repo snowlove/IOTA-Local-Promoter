@@ -147,7 +147,7 @@
 
         ccurlHashing(trunkTransaction, branchTransaction, minWeightMagnitude, trytes, function(error, success) {
             if (error) console.log(error);
-            else console.log(success);
+            //else console.log(success);
             if (callback) return callback(error, success);
             else return success;
         });

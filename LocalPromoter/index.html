@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<title>IOTA local PoW Promotion / Reattachment tool</title>
+		
+		<script type="text/javascript" src="libs/iota.min.js"></script>
+		<script type="text/javascript" src="libs/curl.min.js"></script>
+		<script type="text/javascript" src="libs/iota.extensions.js"></script>
+
+<script>
+	var iota, node, logElement;
+
+	var user = {
+		nodes : '',
+		hash : null,
+		hashes : [],
+		promo : 0,
+		promoMax : 35,
+		params : { interrupt : function() { if(user.promo > 0) { print(user.promo.toString() + "/" + user.promoMax.toString() + " promotions"); } if(user.interrupt) return true; else return user.promo++ >= user.promoMax; }, delay: 200 },
+		interrupt : false,
+		inclusionworker : false
+	}
+	/*
+	* Partial by   : snowlove
+	* website      :  https://cindar.me
+	* LICENSE    : Creative Commons [BY][SA][NC] : https://creativecommons.org/licenses/by-nc-sa/3.0/legalcode.txt
+	*/
+
+	function timestamp() {
+		var date = new Date();
+		var hh = date.getHours() < 10 ? "0" + date.getHours() : date.getHours();
+		var mm = date.getMinutes() < 10 ? "0" + date.getMinutes() : date.getMinutes();
+		var ss = date.getSeconds() < 10 ? "0" + date.getSeconds() : date.getSeconds();
+		time = hh + ":" + mm + ":" + ss;
+		
+		delete date;
+		return time;
+	}
+	
+	function print(msg, e=null, type=null) {
+		if(e) Toggle_Submit();
+		var logline = document.createElement("div");
+		logline.innerHTML = "[" + timestamp() + "]: " + msg;
+		logElement.insertBefore(logline, logElement.firstChild);
+	}
+	
+	/* validatefield(value, sender) */
+	/* returns bool */
+	function validatefield(v, s) {
+		if(s == 'hash') {
+			if(!v || !iota.valid.isHash(v)) {
+				document.getElementById("promoteTxHash").classList.add('is-invalid'); document.getElementById("errorhash").innerHTML = '<span class="badge badge-danger">invalid hash</span>'; return false;
+			} else {
+				document.getElementById("promoteTxHash").classList.remove('is-invalid'); document.getElementById("errorhash").innerHTML = ''; return true;
+			}
+		}
+		
+		if(s == 'node') {
+			var gruber = /\b((?:https?:\/\/|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}\/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'".,<>?«»“”‘’]))/i;
+			if(!v || !gruber.exec(v)) {
+				document.getElementById("node").classList.add('is-invalid'); document.getElementById("errornode").innerHTML = '<span class="badge badge-danger">invalid node</span>'; return false;
+			} else {
+				document.getElementById("node").classList.remove('is-invalid'); document.getElementById("errornode").innerHTML = ''; return true;
+			}
+		}
+	}
+	
+	
+	/* Check for webgl support because it's required. */
+	function webgl_support() {
+		try{ var canvas = document.createElement( 'canvas' ); return !! window.WebGLRenderingContext && (canvas.getContext( 'webgl' ) || canvas.getContext( 'experimental-webgl' ) ); }catch( e ) { return false; }
+	}
+	
+	
+	function pageLoaded() {
+		if(!iota) iota = new IOTA();
+		iota.api.attachToTangle = iota.localAttachToTangle;
+		iota.api.__proto__.attachToTangle = iota.localAttachToTangle;
+		iota.api.interruptAttachingToTangle = iota.localInterruptAttachingToTangle;
+		iota.api.__proto__.interruptAttachingToTangle = iota.localInterruptAttachingToTangle;
+		logElement = document.getElementById("eventLogContent");
+		print("Testing for WebGL...");
+		if(webgl_support()) { print("<span class=\"badge badge-success\">Success</span> WebGL Enabled READY, SET, GO!"); } else { print("<span class=\"badge badge-danger\">Error</span> WebGL not enabled. [<a href=\"https://www.google.com/search?q=How+do+I+enable+WebGL&ie=utf-8\">Click here</a>] for help enabling it."); }	
+	}
+	
+	function inclusionWorker() {
+		if(user.hashes.length < 1) return;
+		
+		function checkInclusion (err, isIncluded) {
+			var tmp = [];
+			var c = 0;
+			var offset = 0;
+
+			print("[InclusionWorker] Checking confirmation states...");
+
+			isIncluded.forEach(function(v) {
+				if(v) {
+					if(user.hash == user.hashes[c]) user.interrupt = true;
+					print("[InclusionWorker]: " + user.hashes[c] + " confirmed");
+					tmp.push(c);
+				}
+				c++;
+			});
+			
+			tmp.forEach(function(v) {
+				user.hashes.splice(v-offset, 1); offset++;
+			});
+			
+			if(user.hashes.length > 0) {
+				setTimeout(function () { iota.api.getLatestInclusion(user.hashes, checkInclusion) }, 10000);
+			} else {
+				print("[InclusionWorker]: All hashes confirmed.");
+				user.inclusionworker = false;
+			}
+		}
+		print("[InclusionWorker] initializing");
+		iota.api.getLatestInclusion(user.hashes, checkInclusion);
+	}
+	
+	function Toggle_Submit() {
+		if(document.getElementById("promote-submit").disabled == true)
+		{
+			document.getElementById("promote-submit").disabled = false;
+			document.getElementById("reattach-submit").disabled = false;
+		} else {
+			document.getElementById("promote-submit").disabled = true;
+			document.getElementById("reattach-submit").disabled = true;
+		}
+	}
+
+	/*****************
+	*	testing area
+	*	-
+	*	var x = utils.isBundle(); api.isPromotable() true / false
+	*****************/
+	
+	function TestFunction(hash, node) {
+		print("This is a button I use for testing new features :)");
+	}
+	
+	//end test	
+	
+	function getTxTail(hash) {
+		iota.api.getTransactionsObjects([hash], function(e, s) {
+			if (s) { iota.api.sendCommand({'command': 'findTransactions', 'bundles': [s[0]['bundle']]}, function(e, s) { if(s) { print("Tail found: " + s[0]); } if(e) print("Couldn't find the tail try again or try a different node."); }); }
+			if (e) { print("Couldn't find the tail try again or try a different node."); }
+		});
+	}
+	
+	function preflight(hash, node, btn) {
+		if(!validatefield(hash, 'hash')) return; else { var _t = false; user.hashes.forEach(function(v) { if(v==hash) _t = true }); if(!_t) user.hashes.push(hash); }
+		if(!validatefield(node, 'node')) return; else iota._makeRequest.provider = node;
+
+		user.hash = hash;
+		user.interrupt = false;
+		user.promo = 0;
+		
+		Toggle_Submit();
+		
+		if(!user.inclusionworker) {
+			inclusionWorker();
+			user.inclusionworker = true;
+		}
+		
+		if (btn == "promote") {
+			if(iota.api.isPromotable(hash)) {
+				iota.api.getLatestInclusion([hash], function(e, s) {
+					if(!s[0]) Promote_Transaction(hash);
+				});
+			} else {
+				print("Transaction not promotable, try reattaching isntead.", true);
+			}			
+		}
+		else if (btn == "reattach") {
+			reattachTransaction(hash);
+		} else {
+			print("stop breaking things.", true);
+		}
+	}
+
+	function reattachTransaction(txHash) {
+		print("Reattaching...");
+		iota.api.replayBundle(txHash, 3, 14, function(e, s) {
+			if(s) {
+				var i=0;
+				user.hashes.forEach(function(v) {
+					if (v == txHash)
+						user.hashes[i] = s[0].hash;
+					i++;
+				});
+				print("Reattached sucessful :: New tail: " + s[0].hash.toString(), true);
+			}
+			
+			if(e) {
+				if (e.toString().includes("tail")) {
+					print("stopped :: hash is not the transaction tail", true);
+					print("Finding tail....");
+					getTxTail(txHash);
+				} else { print(e, true); }
+			}
+		});
+	}
+	
+	function Promote_Transaction(txHash) {
+		const transfer = [{
+			address: "IS9SOMEONE9GETTING9THE9BEST9THE9BEST9THE9BEST9THE9BEST9OF9YOU9SNOWLOVE99999999999",
+			value: 0,
+			message: "BCBDCDKD9DCDJDTCEASCCDBDTCEAKDTCBDHDEAPCBDSCEAIDGDTCSCEATBPCJDPCGDRCFDXCDDHDEAKDWCCDEAKDCDID9DSCEACDUCEAHDWCIDBDZCEAXCHDSAEAFDTCSCSCXCHDSARCCDADTAFDTAXCCDHDPCGDIDDDDDCDFDHD",
+			tag: "99IOTASUPPORT9SNOWLOVE"
+		}];
+
+		iota.api.promoteTransaction(txHash, 3, 15, transfer, user.params, function(e, s) {
+			if (s) 
+				print("Promotion finished", true);
+			
+			if(e) {
+				if(e.toString().includes("Inconsistent")) {
+					print("stopped :: Inconsistent subtangle", true);
+					//TODO :: Reattach every x minutes instead.
+				}
+				else if (e.toString().includes("tail"))
+				{
+					print("stopped :: hash is not the transaction tail", true);
+					print("Finding tail....");
+					getTxTail(txHash);
+				}
+				else if (e.toString().includes("Invalid transaction"))
+				{
+					print("stopped :: Invalid Transaction", true);
+				} else {
+					print("stopped :: general error :: resubmit", true);
+				}
+				console.log(e);
+			}
+		});
+	}
+window.onload = pageLoaded;
+</script>
+
+<link href="https://maxcdn.bootstrapcdn.com/bootswatch/4.0.0-beta.3/superhero/bootstrap.min.css" rel="stylesheet" integrity="sha384-5wAMKUlGYMj+I1P0kUCCwryZKMvv4S6K2e0UlixY5YK3Z4/HWKP9MtELCm0Iyo74" crossorigin="anonymous">
+<link href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet" integrity="sha384-wvfXpqpZZVQGK6TAh5PVlGOfQNHSoD2xbE+QkPxCAFlNEevoEH3Sl0sibVcOQVnN" crossorigin="anonymous" />
+<style type="text/css">
+#errorhash, #errornode { display: inline-block; color:crimson; padding-left: 4px; }
+html, body { margin: 0;padding: 0;height: calc(100% - 60px);position: relative;width: 100%; }
+.incwrap { margin: auto;width: 80%;padding-bottom: 100px; }
+
+.navbar { min-height:  55px; margin-bottom: 20px; }
+main { min-width: 900px;min-height: 100%; }
+.form-control.number { width: auto; }
+.form-control[type="color"] { width : 60px; padding : 2px; display : inline-block; }
+.form-control[multiple] { height : auto; }
+.form-control { width: 75%; display: inline-block; margin-top: 5px; }
+label { padding-right: 5px; display: inline-block; width: 45px; font-weight: bold; } 
+
+.border-light { color: white; }
+pre > div > a { color: #E49647; }
+pre > div > a:hover { color:#FFF; text-decoration:none; }
+.badge { min-width:45px; }
+footer { line-height: 45px; top: 0; position: relative; width: 100%; background-color:#4e5d6c; color: #FFF; overflow:auto; text-align:center; }
+.fsStoreF { font-size: 1.2em; }
+.fb-button.form-group.field-promote-submit { padding-left: 45px; }
+.btn { width: 200px; }
+.btn-addition { margin-left: 10px; }
+.is-invalid { border-width: 2px; }
+.provider { position: absolute; padding-right: 15px; right: 0px; } /* at Ralfs request, added link to the main iota.fm site since he's so kind to let us use his nodes as default. */
+</style>
+
+</head>
+
+<body>
+	<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+	<a class="navbar-brand" href="#">Local PoW</a>
+	<button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarColor02" aria-controls="navbarColor02" aria-expanded="false" aria-label="Toggle navigation" style="">
+		<span class="navbar-toggler-icon"></span>
+	</button>
+	
+	<div class="collapse navbar-collapse" id="navbarColor02">
+		<ul class="navbar-nav mr-auto">
+		<li class="nav-item active">
+			<a class="nav-link" href="#">Home <span class="sr-only">(current)</span></a>
+		</li>
+		<li class="nav-item">
+			<a class="nav-link" href="https://github.com/snowlove/IOTA-Local-Promoter">Project Github</a>
+		</li>
+		<li class="nav-item">
+			<a class="nav-link" href="https://discord.gg/fNGZXvh">IOTA Official Discord</a>
+		</li>
+		<li class="nav-item">
+			<a class="nav-link" href="https://www.reddit.com/r/IOTASupport/">IOTA Support subreddit</a>
+		</li>
+		</ul>
+	</div>
+	</nav>
+	
+	
+	
+	<main>
+		<div class="incwrap">
+		<form id="rendered-form">
+			<div class="fb-text form-group field-promote-tx-hash-field">
+				<label for="promoteTxHash" class="fb-text-label">Hash </label><input type="text" placeholder="999999999999999999999999999999999999999999999999999999999999999999999999999999999" onchange="validatefield(this.value, 'hash')" class="form-control" name="promoteTxHash" maxlength="81" id="promoteTxHash" required="required" aria-required="true"><div id="errorhash"></div><br />
+				<label for="node">Node </label><input type="text" placeholder="http://iota.nodeaddress.com:9999" value="http://nodes.iota.fm:80" class="form-control" name="node" id="node" /><div id="errornode"></div>
+			</div>
+			<div class="fb-button form-group field-promote-submit">
+				<button type="button" class="btn btn-primary" name="promote-submit" style="default" id="promote-submit" onClick="preflight(promoteTxHash.value, node.value, 'promote');">Promote</button>
+				<button type="button" class="btn btn-primary btn-addition" name="reattach-submit" style="default" id="reattach-submit" onClick="preflight(promoteTxHash.value, node.value, 'reattach');">Reattach</button>
+				<button type="button" class="btn btn-primary btn-addition" name="reattach-submit" style="default" id="reattach-submit" onClick="TestFunction(promoteTxHash.value, node.value);">Test Function</button>
+			</div>
+		</form>
+		
+		<pre class="panel-body text-left card border-light mb-3" style="height:500px; overflow:auto; padding:5px;" id="eventLogContent"></pre>
+
+		<p>Did this tool help you? Please donate to help create more tools like this: <span class="badge badge-light">OJVPGSRTVELYUW9IHEEBNJQCQXPMXNKFVTWW9ADLYYPDGXWQRACPGQSZCOHUVQSGWKMBNIZNXVYWULCUWDQLIGPALD</span></p>
+		</div>
+	</main>
+	<footer class="fsStoref">
+		<span class="ftext">By Snowlove - Rajiv (Original idea) - GpanosXP (Local PoW)</span><span class="provider">Default node provided by <a href="http://iota.fm">iota.fm</a></span>
+	</footer>
+</body>
+</html>
