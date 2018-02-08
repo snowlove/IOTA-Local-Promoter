@@ -38,10 +38,33 @@
 		return time;
 	}
 	
-	function print(msg, e=null, type=null) {
+	/*function print(msg, e=null, type=null) {
 		if(e) Toggle_Submit();
 		var logline = document.createElement("div");
 		logline.innerHTML = "[" + timestamp() + "]: " + msg;
+		logElement.insertBefore(logline, logElement.firstChild);
+	}*/
+	
+	function print(msg, e=false, type=null) {
+		if(e) Toggle_Submit();
+		var tmp;
+		var logline = document.createElement("div");
+		tmp = "[" + timestamp() + "]: ";
+		if(type == 1) { //warning
+			tmp += '<span class="badge badge-warning">Warning</span> ';
+		} else if(type == 2) { //success
+			tmp += '<span class="badge badge-success">Success</span> ';
+		} else if (type == 3) { //danger
+			tmp += '<span class="badge badge-danger">Error</span> ';
+		} else if (type == 4) { //info
+			tmp += '<span class="badge badge-info">Info</span> ';
+		} else if (type == 5) { //'primary' the orange one
+			tmp += '<span class="badge badge-primary">' + 'amsg' + '</span> ';
+		}
+		
+		tmp += msg;
+		
+		logline.innerHTML = tmp;
 		logElement.insertBefore(logline, logElement.firstChild);
 	}
 	
@@ -50,18 +73,24 @@
 	function validatefield(v, s) {
 		if(s == 'hash') {
 			if(!v || !iota.valid.isHash(v)) {
-				document.getElementById("promoteTxHash").classList.add('is-invalid'); document.getElementById("errorhash").innerHTML = '<span class="badge badge-danger">invalid hash</span>'; return false;
+				print("Invalid hash detected :: " + v.toString(), false, 3);
+				return false;
+				//document.getElementById("TransactionHash").classList.add('is-invalid'); document.getElementById("errorhash").innerHTML = '<span class="badge badge-danger">invalid hash</span>'; return false;
 			} else {
-				document.getElementById("promoteTxHash").classList.remove('is-invalid'); document.getElementById("errorhash").innerHTML = ''; return true;
+				return true;
+				//document.getElementById("TransactionHash").classList.remove('is-invalid'); document.getElementById("errorhash").innerHTML = ''; return true;
 			}
 		}
 		
 		if(s == 'node') {
 			var gruber = /\b((?:https?:\/\/|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}\/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'".,<>?«»“”‘’]))/i;
 			if(!v || !gruber.exec(v)) {
-				document.getElementById("node").classList.add('is-invalid'); document.getElementById("errornode").innerHTML = '<span class="badge badge-danger">invalid node</span>'; return false;
+				print("Invalid node", false, 3);
+				return false;
+				//document.getElementById("node").classList.add('is-invalid'); document.getElementById("errornode").innerHTML = '<span class="badge badge-danger">invalid node</span>'; return false;
 			} else {
-				document.getElementById("node").classList.remove('is-invalid'); document.getElementById("errornode").innerHTML = ''; return true;
+				return true;
+				//document.getElementById("node").classList.remove('is-invalid'); document.getElementById("errornode").innerHTML = ''; return true;
 			}
 		}
 	}
@@ -81,7 +110,11 @@
 		iota.api.__proto__.interruptAttachingToTangle = iota.localInterruptAttachingToTangle;
 		logElement = document.getElementById("eventLogContent");
 		print("Testing for WebGL...");
-		if(webgl_support()) { print("<span class=\"badge badge-success\">Success</span> WebGL Enabled READY, SET, GO!"); } else { print("<span class=\"badge badge-danger\">Error</span> WebGL not enabled. [<a href=\"https://www.google.com/search?q=How+do+I+enable+WebGL&ie=utf-8\">Click here</a>] for help enabling it."); }	
+		
+		if(webgl_support())
+			print("WebGL enabled READY, SET, GO!",false,2);
+		else
+			print("WebGL not enabled. [<a href=\"https://www.google.com/search?q=How+do+I+enable+WebGL&ie=utf-8\">Click here</a>] for help enabling it.", true, 3);	
 	}
 	
 	function inclusionWorker() {
@@ -149,9 +182,34 @@
 	}
 	
 	function preflight(hash, node, btn) {
-		if(!validatefield(hash, 'hash')) return; else { var _t = false; user.hashes.forEach(function(v) { if(v==hash) _t = true }); if(!_t) user.hashes.push(hash); }
-		if(!validatefield(node, 'node')) return; else iota._makeRequest.provider = node;
-
+		//if(!validatefield(hash, 'hash')) return; else { var _t = false; user.hashes.forEach(function(v) { if(v==hash) _t = true }); if(!_t) user.hashes.push(hash); }
+		//if(!validatefield(node, 'node')) return; else
+		
+		//multihash array
+		if(hash.includes(',')) {
+			if(hash.match(/(?:\r\n|\r|\n|\s)/g))
+			{
+				print("Hash contained space or line break! removing..");
+				print(hash);
+				print("------------------------------------------------");
+				hash = hash.replace(/(?:\r\n|\r|\n|\s)/g, '');
+				print(hash);
+				}
+				
+				return false;
+		}
+		
+		if(validatefield() && validatefield()) {
+			var _t = false;
+			iota._makeRequest.provider = node;
+			
+			user.hashes.forEach(function(v) {
+				if(v==hash) _t = true
+			});
+			
+			if(!_t) user.hashes.push(hash);
+		}
+		
 		user.hash = hash;
 		user.interrupt = false;
 		user.promo = 0;
@@ -236,40 +294,12 @@
 		});
 	}
 	
-	/*
-	*	Sender: button who sent the request, Element to toggle.
-	*/
-	function Toggle_Console(s, e, se=null) {
-		var c = document.getElementById(e);
-		var c2 = document.getElementById(se);
-		var btn = document.getElementById(s);
-		
-		/*if(c.classList.contains('hidden')) {
-			c.classList.remove('hidden');
-			btn.innerText = "hide";
-		} else {
-			c.classList.add('hidden');
-			btn.innerText = "show";
-		}*/
-		
-		if(c.classList.contains('hidden')) {
-			c.classList.remove('hidden');
-			c2.classList.add('hidden');
-			btn.innerText = "Single Hash";
-		} else {
-			c.classList.add('hidden');
-			c2.classList.remove('hidden');
-			btn.innerText = "Multiple Hashes";
-		}
-	}
-	
 window.onload = pageLoaded;
 </script>
 
 <link href="https://maxcdn.bootstrapcdn.com/bootswatch/4.0.0-beta.3/superhero/bootstrap.min.css" rel="stylesheet" integrity="sha384-5wAMKUlGYMj+I1P0kUCCwryZKMvv4S6K2e0UlixY5YK3Z4/HWKP9MtELCm0Iyo74" crossorigin="anonymous">
 <link href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet" integrity="sha384-wvfXpqpZZVQGK6TAh5PVlGOfQNHSoD2xbE+QkPxCAFlNEevoEH3Sl0sibVcOQVnN" crossorigin="anonymous" />
 <style type="text/css">
-#errorhash, #errornode { display: inline-block; color:crimson; padding-left: 4px; }
 html, body { margin: 0;padding: 0;height: calc(100% - 60px);position: relative;width: 100%; }
 .incwrap { margin: auto;width: 80%;padding-bottom: 100px; }
 
@@ -290,7 +320,6 @@ footer { line-height: 45px; top: 0; position: relative; width: 100%; background-
 .fb-button.form-group.field-promote-submit { padding-left: 45px; }
 .btn { width: 200px; }
 .btn-addition { margin-left: 10px; }
-.is-invalid { border-width: 2px; }
 .hidden { display: none; }
 .provider { position: absolute; padding-right: 15px; right: 0px; } /* at Ralfs request, added link to the main iota.fm site since he's so kind to let us use his nodes as default. */
 </style>
@@ -328,17 +357,13 @@ footer { line-height: 45px; top: 0; position: relative; width: 100%; background-
 		<div class="incwrap">
 		<form id="rendered-form">
 			<div class="fb-text form-group field-promote-tx-hash-field">
-				<div id="hashgroup">
-					<div id="SingleHash"><label for="promoteTxHash" class="fb-text-label">Hash </label><input type="text" placeholder="999999999999999999999999999999999999999999999999999999999999999999999999999999999" onchange="validatefield(this.value, 'hash')" class="form-control" name="promoteTxHash" maxlength="81" id="promoteTxHash" required="required" aria-required="true"><div id="errorhash"></div><br /></div>
-					<div id="MultiHash" class="hidden"><label for="TransactionHashes" style="vertical-align:top">Hash </label><textarea class="form-control" placeholder="Input a single hash or a list of hashes seperated by a comma. e.g. hash1,hash2,hash3,hash4" id="TransactionHashes" rows="3"></textarea><br /></div>
-					<div id="togglearea"><button type="button" class="btn btn-primary btn-sm" style="float:right; width:auto;" id="HashToggle" onClick="Toggle_Console('HashToggle', 'MultiHash', 'SingleHash')">Multiple Hashes</button></div>
-				</div>
-				<label for="node">Node </label><input type="text" placeholder="http://iota.nodeaddress.com:9999" value="http://nodes.iota.fm:80" class="form-control" name="node" id="node" /><div id="errornode"></div>
+				<label for="TransactionHash" style="vertical-align:top">Hash </label><textarea class="form-control" placeholder="Input a single hash or a list of hashes seperated by a comma. e.g. hash1,hash2,hash3,hash4" name="TransactionHash" id="TransactionHash" rows="2"></textarea><br />
+				<label for="node">Node </label><input type="text" placeholder="http://iota.nodeaddress.com:9999" value="http://nodes.iota.fm:80" class="form-control" name="node" id="node" />
 			</div>
 			<div class="fb-button form-group field-promote-submit">
-				<button type="button" class="btn btn-primary" name="promote-submit" style="default" id="promote-submit" onClick="preflight(promoteTxHash.value, node.value, 'promote');">Promote</button>
-				<button type="button" class="btn btn-primary btn-addition" name="reattach-submit" style="default" id="reattach-submit" onClick="preflight(promoteTxHash.value, node.value, 'reattach');">Reattach</button>
-				<button type="button" class="btn btn-primary btn-addition" name="reattach-submit" style="default" id="reattach-submit" onClick="TestFunction(promoteTxHash.value, node.value);">Test Function</button>
+				<button type="button" class="btn btn-primary" name="promote-submit" style="default" id="promote-submit" onClick="preflight(TransactionHash.value, node.value, 'promote');">Promote</button>
+				<button type="button" class="btn btn-primary btn-addition" name="reattach-submit" style="default" id="reattach-submit" onClick="preflight(TransactionHash.value, node.value, 'reattach');">Reattach</button>
+				<button type="button" class="btn btn-primary btn-addition" name="reattach-submit" style="default" id="reattach-submit" onClick="TestFunction(TransactionHash.value, node.value);">Test Function</button>
 			</div>
 		</form>
 		
