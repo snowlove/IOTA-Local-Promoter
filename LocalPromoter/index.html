@@ -235,6 +235,34 @@
 			}
 		});
 	}
+	
+	/*
+	*	Sender: button who sent the request, Element to toggle.
+	*/
+	function Toggle_Console(s, e, se=null) {
+		var c = document.getElementById(e);
+		var c2 = document.getElementById(se);
+		var btn = document.getElementById(s);
+		
+		/*if(c.classList.contains('hidden')) {
+			c.classList.remove('hidden');
+			btn.innerText = "hide";
+		} else {
+			c.classList.add('hidden');
+			btn.innerText = "show";
+		}*/
+		
+		if(c.classList.contains('hidden')) {
+			c.classList.remove('hidden');
+			c2.classList.add('hidden');
+			btn.innerText = "Single Hash";
+		} else {
+			c.classList.add('hidden');
+			c2.classList.remove('hidden');
+			btn.innerText = "Multiple Hashes";
+		}
+	}
+	
 window.onload = pageLoaded;
 </script>
 
@@ -251,7 +279,7 @@ main { min-width: 900px;min-height: 100%; }
 .form-control[type="color"] { width : 60px; padding : 2px; display : inline-block; }
 .form-control[multiple] { height : auto; }
 .form-control { width: 75%; display: inline-block; margin-top: 5px; }
-label { padding-right: 5px; display: inline-block; width: 45px; font-weight: bold; } 
+label { padding-right: 5px; display: inline-block; width: 55px; font-weight: bold; } 
 
 .border-light { color: white; }
 pre > div > a { color: #E49647; }
@@ -263,6 +291,7 @@ footer { line-height: 45px; top: 0; position: relative; width: 100%; background-
 .btn { width: 200px; }
 .btn-addition { margin-left: 10px; }
 .is-invalid { border-width: 2px; }
+.hidden { display: none; }
 .provider { position: absolute; padding-right: 15px; right: 0px; } /* at Ralfs request, added link to the main iota.fm site since he's so kind to let us use his nodes as default. */
 </style>
 
@@ -299,7 +328,11 @@ footer { line-height: 45px; top: 0; position: relative; width: 100%; background-
 		<div class="incwrap">
 		<form id="rendered-form">
 			<div class="fb-text form-group field-promote-tx-hash-field">
-				<label for="promoteTxHash" class="fb-text-label">Hash </label><input type="text" placeholder="999999999999999999999999999999999999999999999999999999999999999999999999999999999" onchange="validatefield(this.value, 'hash')" class="form-control" name="promoteTxHash" maxlength="81" id="promoteTxHash" required="required" aria-required="true"><div id="errorhash"></div><br />
+				<div id="hashgroup">
+					<div id="SingleHash"><label for="promoteTxHash" class="fb-text-label">Hash </label><input type="text" placeholder="999999999999999999999999999999999999999999999999999999999999999999999999999999999" onchange="validatefield(this.value, 'hash')" class="form-control" name="promoteTxHash" maxlength="81" id="promoteTxHash" required="required" aria-required="true"><div id="errorhash"></div><br /></div>
+					<div id="MultiHash" class="hidden"><label for="TransactionHashes" style="vertical-align:top">Hash </label><textarea class="form-control" placeholder="Input a single hash or a list of hashes seperated by a comma. e.g. hash1,hash2,hash3,hash4" id="TransactionHashes" rows="3"></textarea><br /></div>
+					<div id="togglearea"><button type="button" class="btn btn-primary btn-sm" style="float:right; width:auto;" id="HashToggle" onClick="Toggle_Console('HashToggle', 'MultiHash', 'SingleHash')">Multiple Hashes</button></div>
+				</div>
 				<label for="node">Node </label><input type="text" placeholder="http://iota.nodeaddress.com:9999" value="http://nodes.iota.fm:80" class="form-control" name="node" id="node" /><div id="errornode"></div>
 			</div>
 			<div class="fb-button form-group field-promote-submit">
@@ -309,7 +342,7 @@ footer { line-height: 45px; top: 0; position: relative; width: 100%; background-
 			</div>
 		</form>
 		
-		<pre class="panel-body text-left card border-light mb-3" style="height:500px; overflow:auto; padding:5px;" id="eventLogContent"></pre>
+		<pre class="panel-body text-left card border-light mb-3" style="height:400px; overflow:auto; padding:5px;" id="eventLogContent"></pre>
 
 		<p>Did this tool help you? Please donate to help create more tools like this: <span class="badge badge-light">OJVPGSRTVELYUW9IHEEBNJQCQXPMXNKFVTWW9ADLYYPDGXWQRACPGQSZCOHUVQSGWKMBNIZNXVYWULCUWDQLIGPALD</span></p>
 		</div>
