@@ -16,7 +16,7 @@
 		hash : null,
 		hashes : [],
 		promo : 0,
-		promoMax : 35,
+		promoMax : 5,
 		params : { interrupt : function() { if(user.promo > 0) { print(user.promo.toString() + "/" + user.promoMax.toString() + " promotions"); } if(user.interrupt) return true; else return user.promo++ >= user.promoMax; }, delay: 200 },
 		interrupt : false,
 		inclusionworker : false
@@ -34,17 +34,17 @@
 		var ss = date.getSeconds() < 10 ? "0" + date.getSeconds() : date.getSeconds();
 		time = hh + ":" + mm + ":" + ss;
 		
-		delete date;
+		delete date; //I don't know if objects get disposed of after a function is ran in javascript
 		return time;
 	}
-	
+
+
 	/*function print(msg, e=null, type=null) {
 		if(e) Toggle_Submit();
 		var logline = document.createElement("div");
 		logline.innerHTML = "[" + timestamp() + "]: " + msg;
 		logElement.insertBefore(logline, logElement.firstChild);
 	}*/
-	
 	function print(msg, e=false, type=null) {
 		if(e) Toggle_Submit();
 		var tmp;
@@ -67,13 +67,14 @@
 		logline.innerHTML = tmp;
 		logElement.insertBefore(logline, logElement.firstChild);
 	}
+
 	
 	/* validatefield(value, sender) */
 	/* returns bool */
 	function validatefield(v, s) {
 		if(s == 'hash') {
 			if(!v || !iota.valid.isHash(v)) {
-				print("Invalid hash detected :: " + v.toString(), false, 3);
+				print("Invalid hash detected :: " + v.toString(), true, 3);
 				return false;
 				//document.getElementById("TransactionHash").classList.add('is-invalid'); document.getElementById("errorhash").innerHTML = '<span class="badge badge-danger">invalid hash</span>'; return false;
 			} else {
@@ -85,7 +86,7 @@
 		if(s == 'node') {
 			var gruber = /\b((?:https?:\/\/|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}\/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'".,<>?«»“”‘’]))/i;
 			if(!v || !gruber.exec(v)) {
-				print("Invalid node", false, 3);
+				print("Invalid node", true, 3);
 				return false;
 				//document.getElementById("node").classList.add('is-invalid'); document.getElementById("errornode").innerHTML = '<span class="badge badge-danger">invalid node</span>'; return false;
 			} else {
@@ -116,6 +117,7 @@
 		else
 			print("WebGL not enabled. [<a href=\"https://www.google.com/search?q=How+do+I+enable+WebGL&ie=utf-8\">Click here</a>] for help enabling it.", true, 3);	
 	}
+
 	
 	function inclusionWorker() {
 		if(user.hashes.length < 1) return;
@@ -141,7 +143,7 @@
 			});
 			
 			if(user.hashes.length > 0) {
-				setTimeout(function () { iota.api.getLatestInclusion(user.hashes, checkInclusion) }, 10000);
+				setTimeout(function () { iota.api.getLatestInclusion(user.hashes, checkInclusion) }, 15000);
 			} else {
 				print("[InclusionWorker]: All hashes confirmed.");
 				user.inclusionworker = false;
@@ -150,6 +152,7 @@
 		print("[InclusionWorker] initializing");
 		iota.api.getLatestInclusion(user.hashes, checkInclusion);
 	}
+
 	
 	function Toggle_Submit() {
 		if(document.getElementById("promote-submit").disabled == true)
@@ -181,40 +184,78 @@
 		});
 	}
 	
+	/***************************************
+	*			function attribution by:
+	*						Orth
+	*			Modified by Snowlove
+	*	To find the latest attachment tail
+	****************************************/
+	function get_tail_tx(hash, promote) {
+		print("searching for tail", false, 4);
+		iota.api.findTransactionObjects({'bundles': [hash]}, (err, bundle) => {
+		if (err || bundle.length == 0) {
+			iota.api.getTransactionsObjects([hash], (err, tx) => {
+			if (err) {
+				print("Unable to locate tail", true, 3);
+				return;
+			}
+			get_tail_tx(tx[0].bundle, promote);
+			})
+		} else {
+			var tmpObj = [];
+			
+			bundle.forEach(function(v) {
+				if(v.currentIndex == 0) {
+					if(typeof tmpObj[0] == 'undefined')
+						tmpObj.push(v)
+					else
+						if(v.attachmentTimestamp > tmpObj[0].attachmentTimestamp) {
+							tmpObj.pop();
+							tmpObj.push(v);
+						}
+				}
+			});
+			
+			print("Tail found :: " + tmpObj[0].hash + " Starting again..", false, 2);
+			
+			if(promote)
+				Promote_Transaction(tmpObj[0].hash);
+			else
+				reattachTransaction(tmpObj[0].hash);
+				
+			//return tmpObj[0].hash;
+		}
+		});
+	}
+
 	function preflight(hash, node, btn) {
+		print("Starting...", true, 4);
 		//if(!validatefield(hash, 'hash')) return; else { var _t = false; user.hashes.forEach(function(v) { if(v==hash) _t = true }); if(!_t) user.hashes.push(hash); }
 		//if(!validatefield(node, 'node')) return; else
 		
-		//multihash array
-		if(hash.includes(',')) {
-			if(hash.match(/(?:\r\n|\r|\n|\s)/g))
-			{
-				print("Hash contained space or line break! removing..");
-				print(hash);
-				print("------------------------------------------------");
-				hash = hash.replace(/(?:\r\n|\r|\n|\s)/g, '');
-				print(hash);
-				}
-				
-				return false;
+		var invalidHash = false;
+		
+		if(hash.match(/(?:\r\n|\r|\n|\s)/g))
+			hash = hash.replace(/(?:\r\n|\r|\n|\s)/g, '');
+			
+		user.hashes = hash.split(',');
+		
+		user.hashes.forEach(function(v) {
+			if(!validatefield(v, 'hash')) invalidHash = true;
+		});
+		
+		if(invalidHash || user.hashes.length < 0) {
+			print("Stopping... Either there was an invalid hash or no hashes at all were detected.", false, 3);
+			return false;
 		}
 		
-		if(validatefield() && validatefield()) {
-			var _t = false;
-			iota._makeRequest.provider = node;
-			
-			user.hashes.forEach(function(v) {
-				if(v==hash) _t = true
-			});
-			
-			if(!_t) user.hashes.push(hash);
-		}
-		
-		user.hash = hash;
+		if(!validatefield(node, 'node')) return; else iota._makeRequest.provider = node;
+
+		user.hash = user.hashes[0];
 		user.interrupt = false;
 		user.promo = 0;
-		
-		Toggle_Submit();
+
+		//Toggle_Submit();
 		
 		if(!user.inclusionworker) {
 			inclusionWorker();
@@ -222,23 +263,23 @@
 		}
 		
 		if (btn == "promote") {
-			if(iota.api.isPromotable(hash)) {
-				iota.api.getLatestInclusion([hash], function(e, s) {
-					if(!s[0]) Promote_Transaction(hash);
+			if(iota.api.isPromotable(user.hash)) {
+				iota.api.getLatestInclusion([user.hash], function(e, s) {
+					if(!s[0]) Promote_Transaction(user.hash);
 				});
 			} else {
-				print("Transaction not promotable, try reattaching isntead.", true);
-			}			
-		}
-		else if (btn == "reattach") {
-			reattachTransaction(hash);
+				print("Transaction not promotable, try reattaching isntead.", true, 2);
+			}
+		} else if (btn == "reattach") {
+			reattachTransaction(user.hash);
 		} else {
-			print("stop breaking things.", true);
+			print("stop breaking things.", true, 2);
 		}
 	}
 
+
 	function reattachTransaction(txHash) {
-		print("Reattaching...");
+		print("starting reattachment", false, 4);
 		iota.api.replayBundle(txHash, 3, 14, function(e, s) {
 			if(s) {
 				var i=0;
@@ -247,41 +288,58 @@
 						user.hashes[i] = s[0].hash;
 					i++;
 				});
-				print("Reattached sucessful :: New tail: " + s[0].hash.toString(), true);
+				print("Reattached sucessful :: " + s[0].hash.toString(), true, 2);
 			}
 			
 			if(e) {
 				if (e.toString().includes("tail")) {
-					print("stopped :: hash is not the transaction tail", true);
-					print("Finding tail....");
-					getTxTail(txHash);
+					print("stopped :: hash is not the transaction tail", false, 1);
+					print("Finding tail....", 4);
+					get_tail_tx(txHash, false);
 				} else { print(e, true); }
 			}
 		});
 	}
+
 	
 	function Promote_Transaction(txHash) {
+		print("starting promotion", false, 4);
 		const transfer = [{
 			address: "IS9SOMEONE9GETTING9THE9BEST9THE9BEST9THE9BEST9THE9BEST9OF9YOU9SNOWLOVE99999999999",
 			value: 0,
 			message: "BCBDCDKD9DCDJDTCEASCCDBDTCEAKDTCBDHDEAPCBDSCEAIDGDTCSCEATBPCJDPCGDRCFDXCDDHDEAKDWCCDEAKDCDID9DSCEACDUCEAHDWCIDBDZCEAXCHDSAEAFDTCSCSCXCHDSARCCDADTAFDTAXCCDHDPCGDIDDDDDCDFDHD",
-			tag: "99IOTASUPPORT9SNOWLOVE"
+			tag: "999SNOWLOVE"
 		}];
 
-		iota.api.promoteTransaction(txHash, 3, 15, transfer, user.params, function(e, s) {
-			if (s) 
-				print("Promotion finished", true);
+		iota.api.promoteTransaction(txHash, 3, 14, transfer, user.params, function(e, s) {
+			if (s) {
+				if(user.hashes.length > 0) {
+					user.hashes.shift();
+					
+				if(!validatefield(user.hashes[0]))
+				{
+					print("stopping... error with the next in line hash", false, 3);
+					return;
+				}
+					
+				print("Promoting next hash: " + user.hashes[0], false, 4);
+				Promote_Transaction(user.hashes[0]);
+				} else {
+					print("All promotions finished!", true, 2);
+				}
+			}
 			
 			if(e) {
 				if(e.toString().includes("Inconsistent")) {
-					print("stopped :: Inconsistent subtangle", true);
+					print("stopped :: Inconsistent subtangle. Reattaching...", false, 1);
+					reattachTransaction(txHash);
 					//TODO :: Reattach every x minutes instead.
 				}
 				else if (e.toString().includes("tail"))
 				{
-					print("stopped :: hash is not the transaction tail", true);
-					print("Finding tail....");
-					getTxTail(txHash);
+					print("stopped :: hash is not the transaction tail", false, 1);
+					print("Finding tail....", false, 4);
+					get_tail_tx(txHash, true);
 				}
 				else if (e.toString().includes("Invalid transaction"))
 				{
