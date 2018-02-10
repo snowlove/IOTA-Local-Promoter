@@ -14,14 +14,14 @@
 	var user = {
 		nodes : '',
 		//hashes : [],
-		hashIndex : 0,
+		//hashIndex : 0,
 		hashes : {},
+		weight : 14,
 		promo : 0,
-		promoMax : 55,
-		params : { interrupt : function() { if(user.promo > 0) { print(user.promo.toString() + "/" + user.promoMax.toString() + " promotions :: " + Object.keys(user.hashes)[user.hashIndex]); } if(user.interrupt) return true; else return user.promo++ >= user.promoMax; }, delay: 200 },
+		promoMax : 25,
+		params : { interrupt : function() { if(user.promo > 0) { print(user.promo.toString() + "/" + user.promoMax.toString() + " promotions :: " + Object.keys(user.hashes)[0]); } if(user.interrupt) return true; else return user.promo++ >= user.promoMax; }, delay: 200 },
 		interrupt : false,
-		inclusionworker : false,
-		preprocessing : false
+		inclusionworker : false
 	}
 	/*
 	* Partial by   : snowlove
@@ -135,45 +135,14 @@
 
 	function inclusionWorker() { //this should be the only function to remove a hash, outside of invalid hash during validation.
 		if(Object.keys(user.hashes).length < 1) return;
-		
-		/*function checkInclusion (err, isIncluded) {
-			var tmp = [];
-			var c = 0;
-			var offset = 0;
 
-			print("[InclusionWorker] checking hash confirmation states...", false, 4);
-
-			isIncluded.forEach(function(v) {
-				if(v) {
-					if(user.hashes[user.hashIndex] == user.hashes[c]) user.interrupt = true;
-					print("[InclusionWorker] " + user.hashes[c] + " confirmed", false, 2);
-					tmp.push(c);
-				}
-
-				c++;
-			});
-			
-			tmp.forEach(function(v) {
-				user.hashes.splice(v-offset, 1); offset++;
-			});
-			
-			changefield('hash');
-			
-			if(user.hashes.length > 0) {
-				setTimeout(function () { iota.api.getLatestInclusion(user.hashes, checkInclusion) }, 15000);
-			} else {
-				print("[InclusionWorker] all hashes confirmed");
-				user.inclusionworker = false;
-			}
-		}*/
-		print("[InclusionWorker] initializing");
+		print("[InclusionWorker] initializing", false, 4);
 		var bht = [];
 		for (var key in user.hashes) bht = bht.concat(user.hashes[key]);
-		console.log(bht);
-		console.log("--------------------------------------------------------");
-		console.log(user.hashes);
+
 		function checkbundles(err, isinc) {
 			if(err) { console.log(err); return; }
+			print("[InclusionWorker] checking confirmation states..", false, 4);
 			var bundlehashes = [];
 			var c = 0;
 			
@@ -184,7 +153,7 @@
 			isinc.forEach(function(v) {
 				if(v) {
 					for (var key in user.hashes) {
-						if(Object.keys(user.hashes)[user.hashIndex] == bundlehashes[c]) user.interrupt = true; //interrupting if current
+						if(Object.keys(user.hashes)[0] == bundlehashes[c]) user.interrupt = true; //interrupting if current
 						
 						if(user.hashes[key].includes(bundlehashes[c])) {
 							print("[InclusionWorker] " + key + " confirmed", false, 2);
@@ -195,9 +164,9 @@
 			});
 			
 			if(Object.keys(user.hashes).length > 0) {
-				setTimeout(function () { iota.api.getLatestInclusion(bundlehashes, checkbundles) }, 15000);
+				setTimeout(function () { iota.api.getLatestInclusion(bundlehashes, checkbundles) }, 10000);
 			} else {
-				print("[InclusionWorker] all hashes confirmed");
+				print("[InclusionWorker] shutting down :: all hashes confirmed", false, 2);
 				user.inclusionworker = false;
 			}
 		} //end of new function
@@ -273,17 +242,20 @@
 	function Worker_DoWork(sender) {
 		//Get hash timestamp
 		//if > 10m { reattach } else { promote }
-		user.hashIndex++;
-
-		if(Object.keys(user.hashes).length > user.hashIndex) {
+		//user.hashIndex++;
+		console.log(user.hashes);
+		delete user.hashes[Object.keys(user.hashes)[0]];
+		console.log(user.hashes);
+		console.log("----------------------------------------");
+		if(Object.keys(user.hashes).length > 0) {//user.hashIndex) {
 			if(sender == "promote") {
-				print("promoting hash: " + Object.keys(user.hashes)[user.hashIndex], false, 4);
+				print("promoting hash: " + Object.keys(user.hashes)[0], false, 4); //changed from user.hashindex to 0
 				user.promo = 0;
 				user.interrupt = false;
-				Promote_Transaction(Object.keys(user.hashes)[user.hashIndex]);
+				Promote_Transaction(Object.keys(user.hashes)[0]);
 			} else if(sender == "attach") {
-				print("reattaching hash: " + Object.keys(user.hashes)[user.hashIndex], false, 4);
-				reattachTransaction(Object.keys(user.hashes)[user.hashIndex]);
+				print("reattaching hash: " + Object.keys(user.hashes)[0], false, 4);
+				reattachTransaction(Object.keys(user.hashes)[0]);
 			}
 		} else {
 			if(sender == "promote")
@@ -341,7 +313,7 @@
 		}
 
 
-		user.hashIndex = 0;
+		//user.hashIndex = 0;
 		user.interrupt = false;
 		user.promo = 0;
 		//run logic
@@ -351,12 +323,12 @@
 		}
 		
 		if (btn == "promote") {
-			iota.api.getLatestInclusion([Object.keys(user.hashes)[user.hashIndex]], function(e, s) {
-				if(!s[0]) Promote_Transaction(Object.keys(user.hashes)[user.hashIndex]);
-				else Worker_DoWork();
+			iota.api.getLatestInclusion([Object.keys(user.hashes)[0]], function(e, s) {
+				if(!s[0]) Promote_Transaction(Object.keys(user.hashes)[0]);
+				else { print("skipping :: " + Object.keys(user.hashes)[0] + " already confirmed", false, 2); Worker_DoWork("promote"); }
 			});
 		} else if (btn == "reattach") {
-			reattachTransaction(Object.keys(user.hashes)[user.hashIndex]);
+			reattachTransaction(Object.keys(user.hashes)[0]);
 		} else {
 			print("stop breaking things.", true, 2);
 		}
@@ -412,23 +384,25 @@
 			
 			if(e) {
 				if(e.toString().includes("Inconsistent")) {
-					print("skipping :: Inconsistent subtangle => " + Object.keys(user.hashes)[user.hashIndex], false, 1);
+					if(typeof Object.keys(user.hashes)[0] !== "undefined") print("skipping :: Inconsistent subtangle => " + Object.keys(user.hashes)[0], false, 1);
 				} else if (e.toString().includes("tail")) {
 					print("skipping :: hash is not the transaction tail", false, 1);
 					//print("Finding tail....", false, 4);
 					//get_tail_tx(user.hashes[user.hashIndex], 1);
 				} else if (e.toString().includes("Invalid transaction")) {
-					print("skipping :: Invalid Transaction => " + Object.keys(user.hashes)[user.hashIndex], false, 3);
-				} else if (e.toString().includes('tip')) {
+					print("skipping :: Invalid Transaction => " + Object.keys(user.hashes)[0], false, 3);
+				} else if (e.toString().includes('tip') || e.toString().includes("unlock read")) {
 					print("hiccup starting promotion again.", false, 1);
 					user.promo = 0;
 					user.interrupt = false
-					Promote_Transaction(Object.keys(user.hashes)[user.hashIndex]);
+					Promote_Transaction(Object.keys(user.hashes)[0]);
 				} else if (e.toString().includes("too old")) {
-					print("skipping :: transaction is too old => " + Object.keys(user.hashes)[user.hashIndex], false, 1)
+					print("skipping :: transaction is too old => " + Object.keys(user.hashes)[0], false, 1)
 				} else {
-					console.log(e);
-					print("skipping :: unknown error :: => " + Object.keys(user.hashes)[user.hashIndex], false, 3);
+					if(typeof Object.keys(user.hashes)[0] !== "undefined") {
+						console.log(e);
+						print("skipping :: unknown error :: => " + Object.keys(user.hashes)[0], false, 3);
+					}
 				}
 				Worker_DoWork("promote");
 			}
@@ -458,7 +432,7 @@ pre > div > a:hover { color:#FFF; text-decoration:none; }
 .badge { min-width:45px; }
 footer { line-height: 45px; top: 0; position: relative; width: 100%; background-color:#4e5d6c; color: #FFF; overflow:auto; text-align:center; }
 .fsStoreF { font-size: 1.2em; }
-.fb-button.form-group.field-promote-submit { padding-left: 45px; }
+.fb-button.form-group.field-promote-submit { padding-left: 55px; }
 .btn { width: 200px; }
 .btn-addition { margin-left: 10px; }
 .hidden { display: none; }
@@ -504,7 +478,7 @@ footer { line-height: 45px; top: 0; position: relative; width: 100%; background-
 			<div class="fb-button form-group field-promote-submit">
 				<button type="button" class="btn btn-primary" name="promote-submit" style="default" id="promote-submit" onClick="preflight(TransactionHash.value, node.value, 'promote');">Promote</button>
 				<button type="button" class="btn btn-primary btn-addition" name="reattach-submit" style="default" id="reattach-submit" onClick="preflight(TransactionHash.value, node.value, 'reattach');">Reattach</button>
-				<button type="button" class="btn btn-primary btn-addition" name="reattach-submit" style="default" id="reattach-submit" onClick="TestFunction(TransactionHash.value, node.value);">Test Function</button>
+				<button type="button" class="btn btn-primary btn-addition hidden" name="reattach-submit" style="default" id="reattach-submit" onClick="TestFunction(TransactionHash.value, node.value);">Test Function</button>
 			</div>
 		</form>
 		
