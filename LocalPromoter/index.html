@@ -13,13 +13,15 @@
 
 	var user = {
 		nodes : '',
-		hashes : [],
+		//hashes : [],
 		hashIndex : 0,
+		hashes : {},
 		promo : 0,
-		promoMax : 5,
-		params : { interrupt : function() { if(user.promo > 0) { print(user.promo.toString() + "/" + user.promoMax.toString() + " promotions :: " + user.hashes[user.hashIndex]); } if(user.interrupt) return true; else return user.promo++ >= user.promoMax; }, delay: 200 },
+		promoMax : 55,
+		params : { interrupt : function() { if(user.promo > 0) { print(user.promo.toString() + "/" + user.promoMax.toString() + " promotions :: " + Object.keys(user.hashes)[user.hashIndex]); } if(user.interrupt) return true; else return user.promo++ >= user.promoMax; }, delay: 200 },
 		interrupt : false,
-		inclusionworker : false
+		inclusionworker : false,
+		preprocessing : false
 	}
 	/*
 	* Partial by   : snowlove
@@ -60,6 +62,20 @@
 		
 		logline.innerHTML = tmp;
 		logElement.insertBefore(logline, logElement.firstChild);
+	}
+
+
+	function changefield(field) {
+		if (field == "hash") {
+			var c = document.getElementById("TransactionHash");
+			var tmp = "";
+			
+			for(var i=0, len = Object.keys(user.hashes).length; i < len; i++) {
+				i+1 == len ? tmp = tmp + Object.keys(user.hashes)[i] : tmp = tmp + Object.keys(user.hashes)[i] + ",";
+			}
+
+			c.value = tmp;
+		}
 	}
 
 	
@@ -109,11 +125,18 @@
 	}
 
 	
+	function removeduplicates(arr) {
+		let unique_array = arr.filter(function(elem, index, self) {
+			return index == self.indexOf(elem);
+		});
+		return unique_array
+	}
+
+
 	function inclusionWorker() { //this should be the only function to remove a hash, outside of invalid hash during validation.
-		if(user.hashes.length < 1) return;
-		var secrethappyhash = user.hashes;
+		if(Object.keys(user.hashes).length < 1) return;
 		
-		function checkInclusion (err, isIncluded) {
+		/*function checkInclusion (err, isIncluded) {
 			var tmp = [];
 			var c = 0;
 			var offset = 0;
@@ -126,6 +149,7 @@
 					print("[InclusionWorker] " + user.hashes[c] + " confirmed", false, 2);
 					tmp.push(c);
 				}
+
 				c++;
 			});
 			
@@ -133,15 +157,51 @@
 				user.hashes.splice(v-offset, 1); offset++;
 			});
 			
+			changefield('hash');
+			
 			if(user.hashes.length > 0) {
 				setTimeout(function () { iota.api.getLatestInclusion(user.hashes, checkInclusion) }, 15000);
 			} else {
 				print("[InclusionWorker] all hashes confirmed");
 				user.inclusionworker = false;
 			}
-		}
+		}*/
 		print("[InclusionWorker] initializing");
-		iota.api.getLatestInclusion(user.hashes, checkInclusion);
+		var bht = [];
+		for (var key in user.hashes) bht = bht.concat(user.hashes[key]);
+		console.log(bht);
+		console.log("--------------------------------------------------------");
+		console.log(user.hashes);
+		function checkbundles(err, isinc) {
+			if(err) { console.log(err); return; }
+			var bundlehashes = [];
+			var c = 0;
+			
+			for (var key in user.hashes) {
+				bundlehashes = bundlehashes.concat(user.hashes[key]);
+			}
+			
+			isinc.forEach(function(v) {
+				if(v) {
+					for (var key in user.hashes) {
+						if(Object.keys(user.hashes)[user.hashIndex] == bundlehashes[c]) user.interrupt = true; //interrupting if current
+						
+						if(user.hashes[key].includes(bundlehashes[c])) {
+							print("[InclusionWorker] " + key + " confirmed", false, 2);
+							delete user.hashes[key]; //bye bye
+						}
+					}
+				} c++;
+			});
+			
+			if(Object.keys(user.hashes).length > 0) {
+				setTimeout(function () { iota.api.getLatestInclusion(bundlehashes, checkbundles) }, 15000);
+			} else {
+				print("[InclusionWorker] all hashes confirmed");
+				user.inclusionworker = false;
+			}
+		} //end of new function
+		iota.api.getLatestInclusion(bht, checkbundles);
 	}
 
 	
@@ -179,82 +239,107 @@
 	*			Modified by Snowlove
 	*	To find the latest attachment tail
 	****************************************/
-	function get_tail_tx(hash, promote=0) {
-		//print("searching for tail", false, 4);
-		iota.api.findTransactionObjects({'bundles': [hash]}, (err, bundle) => {
-		if (err || bundle.length == 0) {
-			iota.api.getTransactionsObjects([hash], (err, tx) => {
-			if (err) {
-				print("Unable to locate tail", true, 3);
-				return;
-			}
-			get_tail_tx(tx[0].bundle, promote);
-			})
-		} else {
-			var tmpObj = [];
-			
-			bundle.forEach(function(v) {
-				if(v.currentIndex == 0) {
-					if(typeof tmpObj[0] == 'undefined')
-						tmpObj.push(v)
-					else
-						if(v.attachmentTimestamp > tmpObj[0].attachmentTimestamp) {
-							tmpObj.pop();
-							tmpObj.push(v);
-						}
-				}
-			});
-			
-			if(promote == 43)
-				return tmpObj[0].hash;
-			
-			print("Tail found :: " + tmpObj[0].hash + " Starting again..", false, 2);
-			
-			if(promote == 1) //[1] if I do promote_transaction(get_tail_tx(hash)) it'll fire off instantly before getting a hash back from get_tail_tx so it will be null and error. so I added this for the time being
-				Promote_Transaction(tmpObj[0].hash);
-			else
-				reattachTransaction(tmpObj[0].hash);
+	function get_tail_tx(hash) {
+		return new Promise(function(resolve, reject) {
+			function txtxtx(hash) {
+				iota.api.findTransactionObjects({'bundles': [hash]}, (err, bundle) => {
+					if (err || bundle.length == 0) {
+						iota.api.getTransactionsObjects([hash], (err, tx) => {
+							if (err) reject("unable to locate tail");
+							txtxtx(tx[0].bundle);
+						})
+					} else {
+						var tmpObj = [];
+						var incBundle = [];
 				
-			//return tmpObj[0].hash; //see [1]
-		}
+						bundle.forEach(function(v) {
+							if(v.currentIndex == 0) {
+								incBundle.push(v.hash); //for inclusionbundle for inclusionworker, because pending forever on attachments if it wasn't the replay confirmed
+								if(typeof tmpObj[0] == 'undefined') //to init tmpObj, I confusized myself for a moment.
+									tmpObj.push(v)
+								else
+									if(v.attachmentTimestamp > tmpObj[0].attachmentTimestamp) { tmpObj.pop(); tmpObj.push(v); }
+							}
+						});
+						user.hashes[tmpObj[0].hash] = incBundle;
+						resolve(tmpObj[0].hash);
+					}
+				});
+			} txtxtx(hash);
 		});
 	}
 
 
-	function Worker_DoWork(sender, hash) {
+	function Worker_DoWork(sender) {
 		//Get hash timestamp
 		//if > 10m { reattach } else { promote }
+		user.hashIndex++;
+
+		if(Object.keys(user.hashes).length > user.hashIndex) {
+			if(sender == "promote") {
+				print("promoting hash: " + Object.keys(user.hashes)[user.hashIndex], false, 4);
+				user.promo = 0;
+				user.interrupt = false;
+				Promote_Transaction(Object.keys(user.hashes)[user.hashIndex]);
+			} else if(sender == "attach") {
+				print("reattaching hash: " + Object.keys(user.hashes)[user.hashIndex], false, 4);
+				reattachTransaction(Object.keys(user.hashes)[user.hashIndex]);
+			}
+		} else {
+			if(sender == "promote")
+				print("all promotions finished", true, 2);
+			else if (sender =="attach")
+				print("all reattachments finished", true, 2);
+			else
+				print("unknown error", true, 3);
+				
+			changefield('hash');
+		}
 	}
 
 	
-	function preflight(hash, node, btn) {
-		var preprocess = 0;
-		var invalidHash = false;
-		
+	async function preprocesstx(inputs) {
+		return new Promise(async function(resolve, reject) {
+			for(var i=0, len = inputs.length; i < len; i++) {
+				var x;
+				//print("Processing " + (i+1) + "/" + len.toString(), false, 4);
+				if(!validatefield(inputs[i], 'hash')) reject("invalid hash");
+
+				try { x = await get_tail_tx(inputs[i]); } catch(e) { reject(e); }
+				
+				if(x != inputs[i]) {
+					print("processing " + (i+1) + "/" + len.toString() + "\n" + inputs[i] + " => " + x, false, 4);
+					//user.hashes[i] = x;
+				} else {
+					print("processing " + (i+1) + "/" + len.toString() + "\n" + inputs[i] + " => GOOD", false, 4);
+				}
+			}
+			//user.hashes = removeduplicates(user.hashes);
+			changefield('hash');
+			resolve("done processing transactions");
+		});
+	}
+	
+	
+	async function preflight(hash, node, btn) {
 		print("Starting...", true, 4);
 		if(!validatefield(node, 'node')) return; else iota._makeRequest.provider = node;
 		
 		if(hash.match(/(?:\r\n|\r|\n|\s)/g))
 			hash = hash.replace(/(?:\r\n|\r|\n|\s)/g, '');
 			
-		user.hashes = hash.split(',');
-		
-		user.hashes.forEach(async function(v) {
-			print("Processing " + preprocess + "/" + user.hashes.length.toString(), false, 4);
-			if(!validatefield(v, 'hash')) invalidHash = true;
-			var x = await get_tail_tx(v, 43);
-			if(x != v) {
-				user.hashes[preprocess] = x; print("HASH WAS OFF :: " + v + " :: " + x);
-} else { print("HASH WAS GOOD"); }
-			preprocess++;
-		});
-		print("shit");
-		return;
-		if(invalidHash || user.hashes.length < 0) {
-			print("Stopping... Either there was an invalid hash or no hashes at all were detected.", false, 3);
+		hash = hash.split(',');
+
+		try {
+			var x = await preprocesstx(hash);
+			print(x, false, 2);
+		} catch(e) {
+			if(!e.toString().includes("invalid hash"))
+				print(e, true, 3);
+				
 			return;
 		}
-		
+
 
 		user.hashIndex = 0;
 		user.interrupt = false;
@@ -266,16 +351,12 @@
 		}
 		
 		if (btn == "promote") {
-			if(iota.api.isPromotable(user.hashes[user.hashIndex])) {
-				iota.api.getLatestInclusion([user.hashes[user.hashIndex]], function(e, s) {
-					if(!s[0]) Promote_Transaction(user.hashes[user.hashIndex]);
-				});
-			} else {
-				print("Transaction not promotable, reattaching instead", false, 4);
-				reattachTransaction(user.hashes[user.hashIndex]);
-			}
+			iota.api.getLatestInclusion([Object.keys(user.hashes)[user.hashIndex]], function(e, s) {
+				if(!s[0]) Promote_Transaction(Object.keys(user.hashes)[user.hashIndex]);
+				else Worker_DoWork();
+			});
 		} else if (btn == "reattach") {
-			reattachTransaction(user.hashes[user.hashIndex]);
+			reattachTransaction(Object.keys(user.hashes)[user.hashIndex]);
 		} else {
 			print("stop breaking things.", true, 2);
 		}
@@ -286,23 +367,33 @@
 		print("starting reattachment", false, 4);
 		iota.api.replayBundle(hash, 3, 14, function(e, s) {
 			if(s) {
-				var i=0;
-				user.hashes.forEach(function(v) {
+				//var i=0;
+				for(var key in user.hashes) {
+					if (key == hash) {
+						user.hashes[key].push(key); //push
+						user.hashes[s[0].hash] = user.hashes[key]; //switch
+						delete user.hashes[key]; //pop
+					}
+				}
+				/*Object.keys(user.hashes).forEach(function(v) {
 					if (v == hash)
 						user.hashes[i] = s[0].hash;
 					i++;
-				});
-				print("Reattached sucessful :: " + s[0].hash.toString(), true, 2);
+				});*/
+				
+				print("reattached sucessful :: " + s[0].hash, false, 2);
 				//add logic-ONE EIGHT HUNDRED YALLLLLLL WOOOOOO... to continue through the hashes array
 			}
 			
 			if(e) {
 				if (e.toString().includes("tail")) {
-					print("stopped :: hash is not the transaction tail", false, 1);
-					print("Finding tail....", 4);
-					get_tail_tx(hash);
-				} else { print(e, true, 3); }
+					print("skipping :: hash is not the transaction tail", false, 1);
+					//print("Finding tail....", 4);
+					//get_tail_tx(hash);
+				} else { print(e, false, 3); }
 			}
+			
+			Worker_DoWork("attach");
 		});
 	}
 
@@ -317,43 +408,29 @@
 		}];
 
 		iota.api.promoteTransaction(hash, 3, 14, transfer, user.params, function(e, s) {
-			if (s) {
-				if(user.hashes.length > 0 && user.hashes.length > user.hashIndex) {
-					//user.hashes.shift();
-					//if(!validatefield(user.hashes[0], 'hash')) {
-						//print("stopping... error with the next in line hash :: " + user.hashes[0], false, 3);
-						//return;
-					//}
-
-					print("Promoting next hash: " + user.hashes[user.hashIndex + 1], false, 4);
-					user.promo = 0;
-					user.interrupt = false;
-					Promote_Transaction(user.hashes[++user.hashIndex]);
-				} else {
-					print("All promotions finished!", true, 2);
-				}
-			}
+			if (s) Worker_DoWork("promote");
 			
 			if(e) {
 				if(e.toString().includes("Inconsistent")) {
-					print("stopped :: Inconsistent subtangle. Reattaching...", false, 1);
-					reattachTransaction(user.hashes[user.hashIndex]);
-					//TODO :: Reattach every x minutes instead.
-				} else if (e.toString().includes("tail") || e.toString().includes("too old")) {
-					print("stopped :: hash is not the transaction tail", false, 1);
-					print("Finding tail....", false, 4);
-					get_tail_tx(user.hashes[user.hashIndex], 1);
+					print("skipping :: Inconsistent subtangle => " + Object.keys(user.hashes)[user.hashIndex], false, 1);
+				} else if (e.toString().includes("tail")) {
+					print("skipping :: hash is not the transaction tail", false, 1);
+					//print("Finding tail....", false, 4);
+					//get_tail_tx(user.hashes[user.hashIndex], 1);
 				} else if (e.toString().includes("Invalid transaction")) {
-					print("stopped :: Invalid Transaction", true, 3);
+					print("skipping :: Invalid Transaction => " + Object.keys(user.hashes)[user.hashIndex], false, 3);
 				} else if (e.toString().includes('tip')) {
-					print("Hiccup starting promotion again.", false, 1);
+					print("hiccup starting promotion again.", false, 1);
 					user.promo = 0;
 					user.interrupt = false
-					Promote_Transaction(user.hashes[user.hashIndex]);
+					Promote_Transaction(Object.keys(user.hashes)[user.hashIndex]);
+				} else if (e.toString().includes("too old")) {
+					print("skipping :: transaction is too old => " + Object.keys(user.hashes)[user.hashIndex], false, 1)
 				} else {
 					console.log(e);
-					print("stopped :: general error :: resubmit", true, 3);
+					print("skipping :: unknown error :: => " + Object.keys(user.hashes)[user.hashIndex], false, 3);
 				}
+				Worker_DoWork("promote");
 			}
 		});
 	}
