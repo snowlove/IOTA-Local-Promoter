@@ -13,8 +13,6 @@
 
 	var user = {
 		nodes : '',
-		//hashes : [],
-		//hashIndex : 0,
 		hashes : {},
 		weight : 14,
 		promo : 0,
@@ -169,7 +167,7 @@
 				print("[InclusionWorker] shutting down :: all hashes confirmed", false, 2);
 				user.inclusionworker = false;
 			}
-		} //end of new function
+		}
 		iota.api.getLatestInclusion(bht, checkbundles);
 	}
 
@@ -194,11 +192,6 @@
 	function TestFunction(hash, node) {
 		print("This is a button I use for testing new features :)");
 		iota._makeRequest.provider = node;
-		iota.api.getLatestInclusion([document.getElementById("TransactionHash").value], function (e,s) {
-	if(e) console.log(e);
-
-	if(s) console.log(s);
-});
 	}
 	
 
@@ -240,16 +233,11 @@
 
 
 	function Worker_DoWork(sender) {
-		//Get hash timestamp
-		//if > 10m { reattach } else { promote }
-		//user.hashIndex++;
-		console.log(user.hashes);
 		delete user.hashes[Object.keys(user.hashes)[0]];
-		console.log(user.hashes);
-		console.log("----------------------------------------");
-		if(Object.keys(user.hashes).length > 0) {//user.hashIndex) {
+
+		if(Object.keys(user.hashes).length > 0) {
 			if(sender == "promote") {
-				print("promoting hash: " + Object.keys(user.hashes)[0], false, 4); //changed from user.hashindex to 0
+				print("promoting hash: " + Object.keys(user.hashes)[0], false, 4);
 				user.promo = 0;
 				user.interrupt = false;
 				Promote_Transaction(Object.keys(user.hashes)[0]);
@@ -274,19 +262,17 @@
 		return new Promise(async function(resolve, reject) {
 			for(var i=0, len = inputs.length; i < len; i++) {
 				var x;
-				//print("Processing " + (i+1) + "/" + len.toString(), false, 4);
 				if(!validatefield(inputs[i], 'hash')) reject("invalid hash");
 
 				try { x = await get_tail_tx(inputs[i]); } catch(e) { reject(e); }
 				
 				if(x != inputs[i]) {
 					print("processing " + (i+1) + "/" + len.toString() + "\n" + inputs[i] + " => " + x, false, 4);
-					//user.hashes[i] = x;
 				} else {
 					print("processing " + (i+1) + "/" + len.toString() + "\n" + inputs[i] + " => GOOD", false, 4);
 				}
 			}
-			//user.hashes = removeduplicates(user.hashes);
+
 			changefield('hash');
 			resolve("done processing transactions");
 		});
@@ -313,10 +299,9 @@
 		}
 
 
-		//user.hashIndex = 0;
 		user.interrupt = false;
 		user.promo = 0;
-		//run logic
+
 		if(!user.inclusionworker) {
 			inclusionWorker();
 			user.inclusionworker = true;
@@ -339,7 +324,6 @@
 		print("starting reattachment", false, 4);
 		iota.api.replayBundle(hash, 3, 14, function(e, s) {
 			if(s) {
-				//var i=0;
 				for(var key in user.hashes) {
 					if (key == hash) {
 						user.hashes[key].push(key); //push
@@ -347,11 +331,6 @@
 						delete user.hashes[key]; //pop
 					}
 				}
-				/*Object.keys(user.hashes).forEach(function(v) {
-					if (v == hash)
-						user.hashes[i] = s[0].hash;
-					i++;
-				});*/
 				
 				print("reattached sucessful :: " + s[0].hash, false, 2);
 				//add logic-ONE EIGHT HUNDRED YALLLLLLL WOOOOOO... to continue through the hashes array
@@ -360,7 +339,6 @@
 			if(e) {
 				if (e.toString().includes("tail")) {
 					print("skipping :: hash is not the transaction tail", false, 1);
-					//print("Finding tail....", 4);
 					//get_tail_tx(hash);
 				} else { print(e, false, 3); }
 			}
@@ -387,7 +365,6 @@
 					if(typeof Object.keys(user.hashes)[0] !== "undefined") print("skipping :: Inconsistent subtangle => " + Object.keys(user.hashes)[0], false, 1);
 				} else if (e.toString().includes("tail")) {
 					print("skipping :: hash is not the transaction tail", false, 1);
-					//print("Finding tail....", false, 4);
 					//get_tail_tx(user.hashes[user.hashIndex], 1);
 				} else if (e.toString().includes("Invalid transaction")) {
 					print("skipping :: Invalid Transaction => " + Object.keys(user.hashes)[0], false, 3);
