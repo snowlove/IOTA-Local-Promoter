@@ -204,12 +204,12 @@
 	function get_tail_tx(hash) {
 		return new Promise(function(resolve, reject) {
 			function txtxtx(hash) {
-				iota.api.findTransactionObjects({'bundles': [hash]}, (err, bundle) => {
+				iota.api.findTransactionObjects({bundles: [hash]}, (err, bundle) => {
 					if (err || bundle.length == 0) {
 						iota.api.getTransactionsObjects([hash], (err, tx) => {
-							if (err) reject("unable to locate tail");
+							if (err || hash == "999999999999999999999999999999999999999999999999999999999999999999999999999999999") { reject("unable to locate tail :: transaction may be too old"); return; }
 							txtxtx(tx[0].bundle);
-						})
+						});
 					} else {
 						var tmpObj = [];
 						var incBundle = [];
@@ -264,7 +264,7 @@
 				var x;
 				if(!validatefield(inputs[i], 'hash')) reject("invalid hash");
 
-				try { x = await get_tail_tx(inputs[i]); } catch(e) { reject(e); }
+				try { x = await get_tail_tx(inputs[i]); } catch(e) { reject(e); return; }
 				
 				if(x != inputs[i]) {
 					print("processing " + (i+1) + "/" + len.toString() + "\n" + inputs[i] + " => " + x, false, 4);
@@ -309,6 +309,7 @@
 		
 		if (btn == "promote") {
 			iota.api.getLatestInclusion([Object.keys(user.hashes)[0]], function(e, s) {
+				if(e) { print("Error during pre-flight inclusion detection. => " + e.toString(), true, 3); return false; }
 				if(!s[0]) Promote_Transaction(Object.keys(user.hashes)[0]);
 				else { print("skipping :: " + Object.keys(user.hashes)[0] + " already confirmed", false, 2); Worker_DoWork("promote"); }
 			});
