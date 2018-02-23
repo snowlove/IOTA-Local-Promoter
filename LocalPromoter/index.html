@@ -13,11 +13,12 @@
 
 	var user = {
 		nodes : '',
-		hashes : {},
+		hashes : {length : 0}, //structure { hash : { hashes : {}, current : bool, confirmed : bool } }
+		hashindex : 0,
 		weight : 14,
 		promo : 0,
-		promoMax : 25,
-		params : { interrupt : function() { if(user.promo > 0) { print(user.promo.toString() + "/" + user.promoMax.toString() + " promotions :: " + Object.keys(user.hashes)[0]); } if(user.interrupt) return true; else return user.promo++ >= user.promoMax; }, delay: 200 },
+		promoMax : 55,
+		params : { interrupt : function() { if(user.promo > 0) { print(user.promo.toString() + "/" + user.promoMax.toString() + " promotions :: " + Object.keys(user.hashes)[user.hashindex]); } if(user.interrupt) return true; else return user.promo++ >= user.promoMax; }, delay: 200 },
 		interrupt : false,
 		inclusionworker : false
 	}
@@ -34,7 +35,6 @@
 		var ss = date.getSeconds() < 10 ? "0" + date.getSeconds() : date.getSeconds();
 		time = hh + ":" + mm + ":" + ss;
 		
-		delete date; //I don't know if objects get disposed of after a function is ran in javascript
 		return time;
 	}
 
@@ -68,10 +68,12 @@
 			var c = document.getElementById("TransactionHash");
 			var tmp = "";
 			
-			for(var i=0, len = Object.keys(user.hashes).length; i < len; i++) {
+			/*for(var i=0, len = Object.keys(user.hashes).length; i < len; i++) {
 				i+1 == len ? tmp = tmp + Object.keys(user.hashes)[i] : tmp = tmp + Object.keys(user.hashes)[i] + ",";
+			}*/
+			for(var i=0, len = user.hashes.length; i <= len; i++) {
+				if(Object.keys(user.hashes)[i] != "length" && user.hashes[Object.keys(user.hashes)[i]].confirmed == false) i == len ? tmp = tmp + Object.keys(user.hashes)[i] : tmp = tmp + Object.keys(user.hashes)[i] + ",";
 			}
-
 			c.value = tmp;
 		}
 	}
@@ -123,22 +125,48 @@
 	}
 
 	
-	function removeduplicates(arr) {
+	/*function removeduplicates(arr) {
 		let unique_array = arr.filter(function(elem, index, self) {
 			return index == self.indexOf(elem);
 		});
 		return unique_array
-	}
+	}*/
 
 
 	function inclusionWorker() { //this should be the only function to remove a hash, outside of invalid hash during validation.
-		if(Object.keys(user.hashes).length < 1) return;
+		//if(Object.keys(user.hashes).length < 1) return;
 
 		print("[InclusionWorker] initializing", false, 4);
 		var bht = [];
-		for (var key in user.hashes) bht = bht.concat(user.hashes[key]);
+		for (var i=0, len = user.hashes.length; i<=len; i++) if(Object.keys(user.hashes)[i] != "length") bht = bht.concat(user.hashes[Object.keys(user.hashes)[i]].bundle);
+		
+		function checkbundles(e, s) {
+			if(e) { console.log(err); return; }
+			print("[InclusionWorker] checking confirmation states..", false, 4);
+			
+			var bundles = [];
+			var conf = 0;
+			
+			for(var i=1, len = user.hashes.length; i<=len; i++) {
+				if(s[i]) conf++;
+				if(s[i] && user.hashes[Object.keys(user.hashes)[i]].confirmed == false) {
+					user.hashes[Object.keys(user.hashes)[i]].confirmed = true;
+					if(Object.keys(user.hashes)[i] == Object.keys(user.hashes)[user.hashindex]) user.interrupt = true;
+					print("[InclusionWorker] " + Object.keys(user.hashes)[i] + " confirmed", false, 2);
+				}
+			}
 
-		function checkbundles(err, isinc) {
+			for (var i=0, len = user.hashes.length; i<=len; i++) if(Object.keys(user.hashes)[i] != "length") bundles = bundles.concat(user.hashes[Object.keys(user.hashes)[i]].bundle);
+
+			if(conf < user.hashes.length) {
+				setTimeout(function () { iota.api.getLatestInclusion(bundles, checkbundles) }, 10000);
+			} else {
+				print("[InclusionWorker] shutting down :: all hashes confirmed", false, 2);
+				user.inclusionworker = false;
+			}
+		}
+		
+		/* function checkbundles(err, isinc) {
 			if(err) { console.log(err); return; }
 			print("[InclusionWorker] checking confirmation states..", false, 4);
 			var bundlehashes = [];
@@ -167,7 +195,7 @@
 				print("[InclusionWorker] shutting down :: all hashes confirmed", false, 2);
 				user.inclusionworker = false;
 			}
-		}
+		} */
 		iota.api.getLatestInclusion(bht, checkbundles);
 	}
 
@@ -216,14 +244,20 @@
 				
 						bundle.forEach(function(v) {
 							if(v.currentIndex == 0) {
-								incBundle.push(v.hash); //for inclusionbundle for inclusionworker, because pending forever on attachments if it wasn't the replay confirmed
-								if(typeof tmpObj[0] == 'undefined') //to init tmpObj, I confusized myself for a moment.
+								incBundle.push(v.hash);
+								
+								if(typeof tmpObj[0] == 'undefined')
 									tmpObj.push(v)
 								else
 									if(v.attachmentTimestamp > tmpObj[0].attachmentTimestamp) { tmpObj.pop(); tmpObj.push(v); }
 							}
 						});
-						user.hashes[tmpObj[0].hash] = incBundle;
+						
+						if (typeof user.hashes[tmpObj[0].hash] == 'undefined') { //only input values into the object if undefined. because, bbq, also duplicates.
+							user.hashes[tmpObj[0].hash] = { bundle : incBundle, confirmed : false, index : user.hashes.length }
+							user.hashes.length++;
+						}
+						//user.hashes[tmpObj[0].hash] = incBundle;
 						resolve(tmpObj[0].hash);
 					}
 				});
@@ -233,9 +267,30 @@
 
 
 	function Worker_DoWork(sender) {
-		delete user.hashes[Object.keys(user.hashes)[0]];
+		//delete user.hashes[Object.keys(user.hashes)[0]];
+		user.hashindex++;
+		if(user.hashindex < user.hashes.length) {
+			if(sender == "promote") {
+				print("promoting hash: " + Object.keys(user.hashes)[user.hashindex], false, 4);
+				user.promo = 0;
+				user.interrupt = false;
+				Promote_Transaction(Object.keys(user.hashes)[user.hashindex]);
+			} else if(sender == "attach") {
+				print("reattaching hash: " + Object.keys(user.hashes)[user.hashindex], false, 4);
+				reattachTransaction(Object.keys(user.hashes)[user.hashindex]);
+			}
+		} else {
+			if(sender == "promote")
+				print("all promotions finished", true, 2);
+			else if (sender =="attach")
+				print("all reattachments finished", true, 2);
+			else
+				print("unknown error", true, 3);
 
-		if(Object.keys(user.hashes).length > 0) {
+			changefield('hash');
+		}
+		
+		/*if(Object.keys(user.hashes).length > 0) {
 			if(sender == "promote") {
 				print("promoting hash: " + Object.keys(user.hashes)[0], false, 4);
 				user.promo = 0;
@@ -254,7 +309,7 @@
 				print("unknown error", true, 3);
 				
 			changefield('hash');
-		}
+		}*/
 	}
 
 	
@@ -301,20 +356,21 @@
 
 		user.interrupt = false;
 		user.promo = 0;
-
+		user.hashindex = 1; //skip length
+		
 		if(!user.inclusionworker) {
 			inclusionWorker();
 			user.inclusionworker = true;
 		}
 		
 		if (btn == "promote") {
-			iota.api.getLatestInclusion([Object.keys(user.hashes)[0]], function(e, s) {
+			iota.api.getLatestInclusion([Object.keys(user.hashes)[user.hashindex]], function(e, s) {
 				if(e) { print("Error during pre-flight inclusion detection. => " + e.toString(), true, 3); return false; }
-				if(!s[0]) Promote_Transaction(Object.keys(user.hashes)[0]);
-				else { print("skipping :: " + Object.keys(user.hashes)[0] + " already confirmed", false, 2); Worker_DoWork("promote"); }
+				if(!s[0]) Promote_Transaction(Object.keys(user.hashes)[user.hashindex]);
+				else { print("skipping :: " + Object.keys(user.hashes)[user.hashindex] + " already confirmed", false, 2); Worker_DoWork("promote"); }
 			});
 		} else if (btn == "reattach") {
-			reattachTransaction(Object.keys(user.hashes)[0]);
+			reattachTransaction(Object.keys(user.hashes)[user.hashindex]);
 		} else {
 			print("stop breaking things.", true, 2);
 		}
@@ -323,18 +379,18 @@
 
 	function reattachTransaction(hash) {
 		print("starting reattachment", false, 4);
+		print(hash, false, 4);
 		iota.api.replayBundle(hash, 3, 14, function(e, s) {
 			if(s) {
 				for(var key in user.hashes) {
 					if (key == hash) {
-						user.hashes[key].push(key); //push
+						user.hashes[key]['bundle'].push(key); //push
 						user.hashes[s[0].hash] = user.hashes[key]; //switch
 						delete user.hashes[key]; //pop
 					}
 				}
 				
 				print("reattached sucessful :: " + s[0].hash, false, 2);
-				//add logic-ONE EIGHT HUNDRED YALLLLLLL WOOOOOO... to continue through the hashes array
 			}
 			
 			if(e) {
@@ -358,28 +414,29 @@
 			tag: "999SNOWLOVE"
 		}];
 
-		iota.api.promoteTransaction(hash, 3, 14, transfer, user.params, function(e, s) {
+		iota.api.promoteTransaction(hash, 4, 15, transfer, user.params, function(e, s) {
 			if (s) Worker_DoWork("promote");
 			
 			if(e) {
 				if(e.toString().includes("Inconsistent")) {
-					if(typeof Object.keys(user.hashes)[0] !== "undefined") print("skipping :: Inconsistent subtangle => " + Object.keys(user.hashes)[0], false, 1);
+					if(typeof Object.keys(user.hashes)[user.hashindex] !== "undefined") print("skipping :: Inconsistent subtangle => " + Object.keys(user.hashes)[user.hashindex], false, 1);
 				} else if (e.toString().includes("tail")) {
 					print("skipping :: hash is not the transaction tail", false, 1);
 					//get_tail_tx(user.hashes[user.hashIndex], 1);
 				} else if (e.toString().includes("Invalid transaction")) {
-					print("skipping :: Invalid Transaction => " + Object.keys(user.hashes)[0], false, 3);
+					print("skipping :: Invalid Transaction => " + Object.keys(user.hashes)[user.hashindex], false, 3);
 				} else if (e.toString().includes('tip') || e.toString().includes("unlock read")) {
 					print("hiccup starting promotion again.", false, 1);
 					user.promo = 0;
 					user.interrupt = false
-					Promote_Transaction(Object.keys(user.hashes)[0]);
+					Promote_Transaction(Object.keys(user.hashes)[user.hashindex]);
+					return;
 				} else if (e.toString().includes("too old")) {
-					print("skipping :: transaction is too old => " + Object.keys(user.hashes)[0], false, 1)
+					print("skipping :: transaction is too old => " + Object.keys(user.hashes)[user.hashindex], false, 1)
 				} else {
-					if(typeof Object.keys(user.hashes)[0] !== "undefined") {
+					if(typeof Object.keys(user.hashes)[user.hashindex] !== "undefined") {
 						console.log(e);
-						print("skipping :: unknown error :: => " + Object.keys(user.hashes)[0], false, 3);
+						print("skipping :: unknown error :: => " + Object.keys(user.hashes)[user.hashindex], false, 3);
 					}
 				}
 				Worker_DoWork("promote");
