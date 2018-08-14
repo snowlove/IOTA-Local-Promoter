@@ -88,14 +88,16 @@
 	
 	/* validatefield(value, sender) */
 	/* returns bool */
-	function validatefield(v, s) {
+	async function validatefield(v, s) {
 		if(s == 'hash') {
-			if(!v || !iota.valid.isHash(v)) {
-				print("Invalid hash detected :: " + v.toString(), true, 3);
-				return false;
-			} else {
-				return true;
-			}
+			return new Promise(function(resolve, reject) {
+				if(!v || !iota.valid.isHash(v)) {
+					print("Invalid hash detected :: " + v.toString(), true, 3);
+					reject('invalid');
+				} else {
+					resolve('valid');
+				}
+			});
 		}
 		
 		if(s == 'node') {
@@ -105,13 +107,11 @@
 				return false;
 			} else {
 				iota._makeRequest.provider = v;
-				iota.api.getNodeInfo(function(e, s) {
-					if (e) {
-						print("Invalid Node", true, 3);
-						return false;
-					} else {
-						return true;
-					}
+				
+				return new Promise(function(resolve, reject) {
+					iota.api.getNodeInfo(function(e, s) {
+						if (e) reject('false'); else resolve('true');
+					});
 				});
 			}
 		}
@@ -362,8 +362,9 @@
 		return new Promise(async function(resolve, reject) {
 			for(var i=0, len = inputs.length; i < len; i++) {
 				var x;
-				if(!validatefield(inputs[i], 'hash')) reject("invalid hash");
-
+				var validateHash;
+				//if(!validatefield(inputs[i], 'hash')) reject("invalid hash");
+				try { validateHash = await validatefield(inputs[i], 'hash'); console.log('asdffasdf');} catch(e) { console.log('asdf');/*reject("invalid hash");*/ continue; }
 				try { x = await get_tail_tx(inputs[i]); } catch(e) { reject(e); return; }
 				
 				if(x != inputs[i]) {
@@ -381,7 +382,14 @@
 	
 	async function preflight(hash, node, btn) {
 		print("Starting...", true, 4);
-		if(!validatefield(node, 'node')) return; else iota._makeRequest.provider = node;
+		//if(!validatefield(node, 'node')) return; else iota._makeRequest.provider = node;
+		try {
+			var validateNode = await validatefield(node, 'node');
+			iota._makeRequest.provider = node;
+		} catch(e) {
+			print("Invalid Node", true, 3);
+			return;
+		}
 		
 		if(hash.match(/(?:\r\n|\r|\n|\s)/g))
 			hash = hash.replace(/(?:\r\n|\r|\n|\s)/g, '');
